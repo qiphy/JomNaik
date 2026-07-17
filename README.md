@@ -22,7 +22,10 @@ and optional community incident reporting.
 - Java 17+
 - At least 4 GB available memory for OTP
 
-The repository already includes the OTP JAR, GTFS archives and `graph.obj`.
+The GTFS archives and OSM inputs are part of the project data. The OTP runtime
+JAR and generated graph files are intentionally **not** committed because they
+exceed common repository file-size limits. Download and generate them locally
+using the steps below.
 
 ## Local setup
 
@@ -48,7 +51,27 @@ SUPABASE_INCIDENT_REPORTS_TABLE=anonymous_incident_reports
 `SUPABASE_SERVICE_ROLE_KEY` must remain on the backend only. Do not put it in
 the Flutter app or commit it to source control.
 
-### 2. Start OTP
+### 2. Download OTP and build the local graph
+
+Download the OTP 2.4.0 shaded JAR into `jomnaik_backend`:
+
+```bash
+cd jomnaik_backend
+curl -L \
+  https://repo1.maven.org/maven2/org/opentripplanner/otp/2.4.0/otp-2.4.0-shaded.jar \
+  -o otp-2.4.0-shaded.jar
+```
+
+Generate `graph.obj` from the local GTFS and OSM inputs:
+
+```bash
+./rebuild_otp_sheltered_graph.sh
+```
+
+This generates `graph.obj` locally. Do not commit it, its backup graphs, or
+the OTP JAR to the repository.
+
+### 3. Start OTP
 
 Open a terminal:
 
@@ -60,7 +83,7 @@ java -Xmx3G -jar otp-2.4.0-shaded.jar --load .
 OTP listens on `http://localhost:8080` by default and loads the local
 `graph.obj`.
 
-### 3. Start the FastAPI backend
+### 4. Start the FastAPI backend
 
 Open a second terminal:
 
@@ -76,7 +99,7 @@ Check that it is running:
 curl http://localhost:8000/api/health
 ```
 
-### 4. Configure Supabase
+### 5. Configure Supabase
 
 Run these SQL files in the Supabase SQL Editor if you use the corresponding
 features:
@@ -89,7 +112,7 @@ features:
 The Flutter app uses the Supabase project URL and publishable key defined in
 `lib/main.dart`, or values supplied at build time.
 
-### 5. Run the Flutter app
+### 6. Run the Flutter app
 
 ```bash
 cd jomnaik
@@ -114,15 +137,16 @@ allows port `8000`.
 
 ## Rebuilding the OTP graph
 
-Rebuild only after changing GTFS data, station transfers, frequency rules or
-the OSM pedestrian network:
+Rebuild after changing GTFS data, station transfers, frequency rules or the
+OSM pedestrian network:
 
 ```bash
 cd jomnaik_backend
 ./rebuild_otp_sheltered_graph.sh
 ```
 
-The script generates an updated `graph.obj`. Restart OTP after a rebuild.
+The script generates an updated local `graph.obj`. Restart OTP after a rebuild.
+The generated graph and any `graph.before-*.obj` backup must remain untracked.
 
 ## Testing and validation
 
