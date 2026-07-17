@@ -1,0 +1,2409 @@
+[
+  {
+    "stop_id": "AG18",
+    "name": "AMPANG",
+    "gtfs_lat": 3.150318,
+    "gtfs_lon": 101.760049,
+    "osm_lat": 3.1505141,
+    "osm_lon": 101.7600712,
+    "difference_meters": 21.9,
+    "osm_name": "Ampang"
+  },
+  {
+    "stop_id": "AG17",
+    "name": "CAHAYA",
+    "gtfs_lat": 3.140575,
+    "gtfs_lon": 101.756677,
+    "osm_lat": 3.1406183,
+    "osm_lon": 101.7566076,
+    "difference_meters": 9.1,
+    "osm_name": "Cahaya"
+  },
+  {
+    "stop_id": "AG16",
+    "name": "CEMPAKA",
+    "gtfs_lat": 3.138324,
+    "gtfs_lon": 101.752979,
+    "osm_lat": 3.138466,
+    "osm_lon": 101.7530639,
+    "difference_meters": 18.4,
+    "osm_name": "Cempaka"
+  },
+  {
+    "stop_id": "AG15",
+    "name": "PANDAN INDAH",
+    "gtfs_lat": 3.134581,
+    "gtfs_lon": 101.746509,
+    "osm_lat": 3.1347495,
+    "osm_lon": 101.7466867,
+    "difference_meters": 27.2,
+    "osm_name": "Pandan Indah"
+  },
+  {
+    "stop_id": "AG14",
+    "name": "PANDAN JAYA",
+    "gtfs_lat": 3.130141,
+    "gtfs_lon": 101.739122,
+    "osm_lat": 3.1302316,
+    "osm_lon": 101.7390046,
+    "difference_meters": 16.5,
+    "osm_name": "Pandan Jaya"
+  },
+  {
+    "stop_id": "AG13",
+    "name": "MALURI",
+    "gtfs_lat": 3.12329,
+    "gtfs_lon": 101.727283,
+    "osm_lat": 3.12325,
+    "osm_lon": 101.7269504,
+    "difference_meters": 37.2,
+    "osm_name": "Maluri"
+  },
+  {
+    "stop_id": "AG12",
+    "name": "MIHARJA",
+    "gtfs_lat": 3.120973,
+    "gtfs_lon": 101.717922,
+    "osm_lat": 3.1209623,
+    "osm_lon": 101.7178694,
+    "difference_meters": 6.0,
+    "osm_name": "Miharja"
+  },
+  {
+    "stop_id": "AG11",
+    "name": "CHAN SOW LIN",
+    "gtfs_lat": 3.128105,
+    "gtfs_lon": 101.715637,
+    "osm_lat": 3.1277571,
+    "osm_lon": 101.7155705,
+    "difference_meters": 39.4,
+    "osm_name": "Chan Sow Lin"
+  },
+  {
+    "stop_id": "AG10",
+    "name": "PUDU",
+    "gtfs_lat": 3.134879,
+    "gtfs_lon": 101.711957,
+    "osm_lat": 3.1349208,
+    "osm_lon": 101.7120144,
+    "difference_meters": 7.9,
+    "osm_name": "Pudu"
+  },
+  {
+    "stop_id": "AG9",
+    "name": "HANG TUAH",
+    "gtfs_lat": 3.140012,
+    "gtfs_lon": 101.705984,
+    "osm_lat": 3.1398734,
+    "osm_lon": 101.7061576,
+    "difference_meters": 24.7,
+    "osm_name": "Hang Tuah"
+  },
+  {
+    "stop_id": "AG8",
+    "name": "PLAZA RAKYAT",
+    "gtfs_lat": 3.144049,
+    "gtfs_lon": 101.702105,
+    "osm_lat": 3.1445346,
+    "osm_lon": 101.7017675,
+    "difference_meters": 65.7,
+    "osm_name": "Plaza Rakyat"
+  },
+  {
+    "stop_id": "AG7",
+    "name": "MASJID JAMEK",
+    "gtfs_lat": 3.14927,
+    "gtfs_lon": 101.696377,
+    "osm_lat": 3.1499051,
+    "osm_lon": 101.697003,
+    "difference_meters": 99.1,
+    "osm_name": "Masjid Jamek"
+  },
+  {
+    "stop_id": "AG6",
+    "name": "BANDARAYA - UOB",
+    "gtfs_lat": 3.155567,
+    "gtfs_lon": 101.694485,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "AG5",
+    "name": "SULTAN ISMAIL",
+    "gtfs_lat": 3.161245,
+    "gtfs_lon": 101.694109,
+    "osm_lat": 3.1611898,
+    "osm_lon": 101.6940974,
+    "difference_meters": 6.3,
+    "osm_name": "Sultan Ismail"
+  },
+  {
+    "stop_id": "AG4",
+    "name": "PWTC",
+    "gtfs_lat": 3.166333,
+    "gtfs_lon": 101.693586,
+    "osm_lat": 3.1665617,
+    "osm_lon": 101.6935652,
+    "difference_meters": 25.5,
+    "osm_name": "PWTC"
+  },
+  {
+    "stop_id": "AG3",
+    "name": "TITIWANGSA",
+    "gtfs_lat": 3.173497,
+    "gtfs_lon": 101.695367,
+    "osm_lat": 3.173587,
+    "osm_lon": 101.6952529,
+    "difference_meters": 16.1,
+    "osm_name": "Titiwangsa"
+  },
+  {
+    "stop_id": "AG2",
+    "name": "SENTUL",
+    "gtfs_lat": 3.178484,
+    "gtfs_lon": 101.695542,
+    "osm_lat": 3.1785862,
+    "osm_lon": 101.6955056,
+    "difference_meters": 12.1,
+    "osm_name": "Sentul"
+  },
+  {
+    "stop_id": "AG1",
+    "name": "SENTUL TIMUR",
+    "gtfs_lat": 3.185897,
+    "gtfs_lon": 101.695217,
+    "osm_lat": 3.1858245,
+    "osm_lon": 101.6952791,
+    "difference_meters": 10.6,
+    "osm_name": "Sentul Timur"
+  },
+  {
+    "stop_id": "KJ37",
+    "name": "PUTRA HEIGHTS",
+    "gtfs_lat": 2.996227,
+    "gtfs_lon": 101.575462,
+    "osm_lat": 2.9961471,
+    "osm_lon": 101.5756323,
+    "difference_meters": 20.9,
+    "osm_name": "Putra Heights"
+  },
+  {
+    "stop_id": "KJ36",
+    "name": "SUBANG ALAM",
+    "gtfs_lat": 3.009421,
+    "gtfs_lon": 101.572281,
+    "osm_lat": 3.009704,
+    "osm_lon": 101.5721901,
+    "difference_meters": 33.0,
+    "osm_name": "Subang Alam"
+  },
+  {
+    "stop_id": "KJ35",
+    "name": "ALAM MEGAH",
+    "gtfs_lat": 3.023151,
+    "gtfs_lon": 101.572029,
+    "osm_lat": 3.0230756,
+    "osm_lon": 101.5719896,
+    "difference_meters": 9.5,
+    "osm_name": "Alam Megah"
+  },
+  {
+    "stop_id": "KJ34",
+    "name": "USJ 21",
+    "gtfs_lat": 3.029881,
+    "gtfs_lon": 101.581711,
+    "osm_lat": 3.0297541,
+    "osm_lon": 101.5817694,
+    "difference_meters": 15.5,
+    "osm_name": "USJ21"
+  },
+  {
+    "stop_id": "KJ33",
+    "name": "WAWASAN",
+    "gtfs_lat": 3.035062,
+    "gtfs_lon": 101.588348,
+    "osm_lat": 3.0350348,
+    "osm_lon": 101.5881378,
+    "difference_meters": 23.5,
+    "osm_name": "Wawasan"
+  },
+  {
+    "stop_id": "KJ32",
+    "name": "TAIPAN",
+    "gtfs_lat": 3.04815,
+    "gtfs_lon": 101.590233,
+    "osm_lat": 3.0478597,
+    "osm_lon": 101.5901798,
+    "difference_meters": 32.8,
+    "osm_name": "Taipan"
+  },
+  {
+    "stop_id": "KJ31",
+    "name": "USJ 7",
+    "gtfs_lat": 3.054956,
+    "gtfs_lon": 101.592194,
+    "osm_lat": 3.0548356,
+    "osm_lon": 101.5920557,
+    "difference_meters": 20.4,
+    "osm_name": "USJ7"
+  },
+  {
+    "stop_id": "KJ30",
+    "name": "SS 18",
+    "gtfs_lat": 3.067182,
+    "gtfs_lon": 101.585945,
+    "osm_lat": 3.0671241,
+    "osm_lon": 101.5860994,
+    "difference_meters": 18.3,
+    "osm_name": "SS18"
+  },
+  {
+    "stop_id": "KJ29",
+    "name": "SS 15",
+    "gtfs_lat": 3.075972,
+    "gtfs_lon": 101.585983,
+    "osm_lat": 3.0756977,
+    "osm_lon": 101.5861061,
+    "difference_meters": 33.4,
+    "osm_name": "SS15"
+  },
+  {
+    "stop_id": "KJ28",
+    "name": "SUBANG JAYA",
+    "gtfs_lat": 3.08466,
+    "gtfs_lon": 101.588127,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "KJ27",
+    "name": "GLENMARIE",
+    "gtfs_lat": 3.094732,
+    "gtfs_lon": 101.590622,
+    "osm_lat": 3.0959134,
+    "osm_lon": 101.5903788,
+    "difference_meters": 134.1,
+    "osm_name": "Glenmarie"
+  },
+  {
+    "stop_id": "KJ26",
+    "name": "ARA DAMANSARA",
+    "gtfs_lat": 3.108643,
+    "gtfs_lon": 101.586372,
+    "osm_lat": 3.1084406,
+    "osm_lon": 101.586599,
+    "difference_meters": 33.8,
+    "osm_name": "Ara Damansara"
+  },
+  {
+    "stop_id": "KJ25",
+    "name": "LEMBAH SUBANG",
+    "gtfs_lat": 3.112094,
+    "gtfs_lon": 101.591034,
+    "osm_lat": 3.111935,
+    "osm_lon": 101.5913205,
+    "difference_meters": 36.4,
+    "osm_name": "Lembah Subang"
+  },
+  {
+    "stop_id": "KJ24",
+    "name": "KELANA JAYA",
+    "gtfs_lat": 3.112497,
+    "gtfs_lon": 101.6043,
+    "osm_lat": 3.1125138,
+    "osm_lon": 101.6045057,
+    "difference_meters": 22.9,
+    "osm_name": "Kelana Jaya"
+  },
+  {
+    "stop_id": "KJ23",
+    "name": "TAMAN BAHAGIA",
+    "gtfs_lat": 3.11079,
+    "gtfs_lon": 101.612856,
+    "osm_lat": 3.1107156,
+    "osm_lon": 101.6127232,
+    "difference_meters": 16.9,
+    "osm_name": "Taman Bahagia"
+  },
+  {
+    "stop_id": "KJ22",
+    "name": "TAMAN PARAMOUNT",
+    "gtfs_lat": 3.104716,
+    "gtfs_lon": 101.623192,
+    "osm_lat": 3.1047121,
+    "osm_lon": 101.6231844,
+    "difference_meters": 0.9,
+    "osm_name": "Taman Paramount"
+  },
+  {
+    "stop_id": "KJ21",
+    "name": "ASIA JAYA",
+    "gtfs_lat": 3.104343,
+    "gtfs_lon": 101.637695,
+    "osm_lat": 3.1043006,
+    "osm_lon": 101.637763,
+    "difference_meters": 8.9,
+    "osm_name": "Asia Jaya"
+  },
+  {
+    "stop_id": "KJ20",
+    "name": "TAMAN JAYA",
+    "gtfs_lat": 3.104086,
+    "gtfs_lon": 101.645248,
+    "osm_lat": 3.1040847,
+    "osm_lon": 101.6453017,
+    "difference_meters": 6.0,
+    "osm_name": "Taman Jaya"
+  },
+  {
+    "stop_id": "KJ19",
+    "name": "UNIVERSITI",
+    "gtfs_lat": 3.114616,
+    "gtfs_lon": 101.661639,
+    "osm_lat": 3.1146154,
+    "osm_lon": 101.6617041,
+    "difference_meters": 7.2,
+    "osm_name": "Universiti"
+  },
+  {
+    "stop_id": "KJ18",
+    "name": "KERINCHI",
+    "gtfs_lat": 3.115506,
+    "gtfs_lon": 101.668572,
+    "osm_lat": 3.1154873,
+    "osm_lon": 101.6685127,
+    "difference_meters": 6.9,
+    "osm_name": "Kerinchi"
+  },
+  {
+    "stop_id": "KJ17",
+    "name": "ABDULLAH HUKUM",
+    "gtfs_lat": 3.118735,
+    "gtfs_lon": 101.672897,
+    "osm_lat": 3.1187593,
+    "osm_lon": 101.6729169,
+    "difference_meters": 3.5,
+    "osm_name": "Abdullah Hukum"
+  },
+  {
+    "stop_id": "KJ16",
+    "name": "BANGSAR - BANK RAKYAT",
+    "gtfs_lat": 3.127588,
+    "gtfs_lon": 101.679062,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "KJ15",
+    "name": "KL SENTRAL - REDONE",
+    "gtfs_lat": 3.13442,
+    "gtfs_lon": 101.68625,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "KJ14",
+    "name": "PASAR SENI",
+    "gtfs_lat": 3.142439,
+    "gtfs_lon": 101.69531,
+    "osm_lat": 3.1425189,
+    "osm_lon": 101.6953712,
+    "difference_meters": 11.2,
+    "osm_name": "Pasar Seni"
+  },
+  {
+    "stop_id": "KJ13",
+    "name": "MASJID JAMEK",
+    "gtfs_lat": 3.149714,
+    "gtfs_lon": 101.696815,
+    "osm_lat": 3.1499051,
+    "osm_lon": 101.697003,
+    "difference_meters": 29.8,
+    "osm_name": "Masjid Jamek"
+  },
+  {
+    "stop_id": "KJ12",
+    "name": "DANG WANGI",
+    "gtfs_lat": 3.156942,
+    "gtfs_lon": 101.701975,
+    "osm_lat": 3.156852,
+    "osm_lon": 101.7019645,
+    "difference_meters": 10.1,
+    "osm_name": "Dang Wangi"
+  },
+  {
+    "stop_id": "KJ11",
+    "name": "KAMPUNG BARU - CBP COOPBANK PERTAMA",
+    "gtfs_lat": 3.161386,
+    "gtfs_lon": 101.706608,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "KJ10",
+    "name": "KLCC",
+    "gtfs_lat": 3.158935,
+    "gtfs_lon": 101.713287,
+    "osm_lat": 3.1591628,
+    "osm_lon": 101.7133606,
+    "difference_meters": 26.6,
+    "osm_name": "KLCC"
+  },
+  {
+    "stop_id": "KJ9",
+    "name": "AMPANG PARK",
+    "gtfs_lat": 3.159894,
+    "gtfs_lon": 101.719017,
+    "osm_lat": 3.1600053,
+    "osm_lon": 101.7191422,
+    "difference_meters": 18.6,
+    "osm_name": "Ampang Park"
+  },
+  {
+    "stop_id": "KJ8",
+    "name": "DAMAI",
+    "gtfs_lat": 3.164406,
+    "gtfs_lon": 101.724489,
+    "osm_lat": 3.1644073,
+    "osm_lon": 101.7243673,
+    "difference_meters": 13.5,
+    "osm_name": "Damai"
+  },
+  {
+    "stop_id": "KJ7",
+    "name": "DATO' KERAMAT",
+    "gtfs_lat": 3.16509,
+    "gtfs_lon": 101.73184,
+    "osm_lat": 3.1650729,
+    "osm_lon": 101.7318764,
+    "difference_meters": 4.5,
+    "osm_name": "Dato' Keramat"
+  },
+  {
+    "stop_id": "KJ6",
+    "name": "JELATEK",
+    "gtfs_lat": 3.167204,
+    "gtfs_lon": 101.735344,
+    "osm_lat": 3.1673172,
+    "osm_lon": 101.7353251,
+    "difference_meters": 12.8,
+    "osm_name": "Jelatek"
+  },
+  {
+    "stop_id": "KJ5",
+    "name": "SETIAWANGSA",
+    "gtfs_lat": 3.17576,
+    "gtfs_lon": 101.73584,
+    "osm_lat": 3.1757679,
+    "osm_lon": 101.735839,
+    "difference_meters": 0.9,
+    "osm_name": "Setiawangsa"
+  },
+  {
+    "stop_id": "KJ4",
+    "name": "SRI RAMPAI",
+    "gtfs_lat": 3.199176,
+    "gtfs_lon": 101.73747,
+    "osm_lat": 3.1991449,
+    "osm_lon": 101.7373096,
+    "difference_meters": 18.1,
+    "osm_name": "Sri Rampai"
+  },
+  {
+    "stop_id": "KJ3",
+    "name": "WANGSA MAJU",
+    "gtfs_lat": 3.205751,
+    "gtfs_lon": 101.731796,
+    "osm_lat": 3.2057139,
+    "osm_lon": 101.731852,
+    "difference_meters": 7.5,
+    "osm_name": "Wangsa Maju"
+  },
+  {
+    "stop_id": "KJ2",
+    "name": "TAMAN MELATI",
+    "gtfs_lat": 3.219558,
+    "gtfs_lon": 101.72197,
+    "osm_lat": 3.2195523,
+    "osm_lon": 101.7218971,
+    "difference_meters": 8.1,
+    "osm_name": "Taman Melati"
+  },
+  {
+    "stop_id": "KJ1",
+    "name": "GOMBAK",
+    "gtfs_lat": 3.231793,
+    "gtfs_lon": 101.724427,
+    "osm_lat": 3.2312221,
+    "osm_lon": 101.7243612,
+    "difference_meters": 63.9,
+    "osm_name": "Gombak"
+  },
+  {
+    "stop_id": "SP31",
+    "name": "PUTRA HEIGHTS",
+    "gtfs_lat": 2.996016,
+    "gtfs_lon": 101.575521,
+    "osm_lat": 2.995961,
+    "osm_lon": 101.5755396,
+    "difference_meters": 6.5,
+    "osm_name": "Putra Heights"
+  },
+  {
+    "stop_id": "SP29",
+    "name": "PUCHONG PRIMA",
+    "gtfs_lat": 2.999808,
+    "gtfs_lon": 101.596692,
+    "osm_lat": 2.9998907,
+    "osm_lon": 101.5967747,
+    "difference_meters": 13.0,
+    "osm_name": "Puchong Prima"
+  },
+  {
+    "stop_id": "SP28",
+    "name": "PUCHONG PERDANA",
+    "gtfs_lat": 3.007913,
+    "gtfs_lon": 101.605021,
+    "osm_lat": 3.0078426,
+    "osm_lon": 101.6052756,
+    "difference_meters": 29.3,
+    "osm_name": "Puchong Perdana"
+  },
+  {
+    "stop_id": "SP27",
+    "name": "BANDAR PUTERI",
+    "gtfs_lat": 3.017111,
+    "gtfs_lon": 101.612855,
+    "osm_lat": 3.016955,
+    "osm_lon": 101.6128366,
+    "difference_meters": 17.5,
+    "osm_name": "Bandar Puteri"
+  },
+  {
+    "stop_id": "SP26",
+    "name": "TAMAN PERINDUSTRIAN PUCHONG",
+    "gtfs_lat": 3.022814,
+    "gtfs_lon": 101.613514,
+    "osm_lat": 3.0227279,
+    "osm_lon": 101.613509,
+    "difference_meters": 9.6,
+    "osm_name": "Taman Perindustrian Puchong"
+  },
+  {
+    "stop_id": "SP25",
+    "name": "PUSAT BANDAR PUCHONG",
+    "gtfs_lat": 3.033194,
+    "gtfs_lon": 101.616057,
+    "osm_lat": 3.0332615,
+    "osm_lon": 101.6160584,
+    "difference_meters": 7.5,
+    "osm_name": "Pusat Bandar Puchong"
+  },
+  {
+    "stop_id": "SP24",
+    "name": "IOI PUCHONG JAYA",
+    "gtfs_lat": 3.048101,
+    "gtfs_lon": 101.62095,
+    "osm_lat": 3.0480692,
+    "osm_lon": 101.6210157,
+    "difference_meters": 8.1,
+    "osm_name": "IOI Puchong Jaya"
+  },
+  {
+    "stop_id": "SP22",
+    "name": "KINRARA",
+    "gtfs_lat": 3.050506,
+    "gtfs_lon": 101.644294,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "SP21",
+    "name": "ALAM SUTERA",
+    "gtfs_lat": 3.0547,
+    "gtfs_lon": 101.656468,
+    "osm_lat": 3.0546854,
+    "osm_lon": 101.6565198,
+    "difference_meters": 6.0,
+    "osm_name": "Alam Sutera"
+  },
+  {
+    "stop_id": "SP20",
+    "name": "MUHIBBAH",
+    "gtfs_lat": 3.062229,
+    "gtfs_lon": 101.662552,
+    "osm_lat": 3.0619468,
+    "osm_lon": 101.6626004,
+    "difference_meters": 31.8,
+    "osm_name": "Muhibbah"
+  },
+  {
+    "stop_id": "SP19",
+    "name": "AWAN BESAR",
+    "gtfs_lat": 3.062131,
+    "gtfs_lon": 101.670555,
+    "osm_lat": 3.0621631,
+    "osm_lon": 101.6706231,
+    "difference_meters": 8.4,
+    "osm_name": "Awan Besar"
+  },
+  {
+    "stop_id": "SP18",
+    "name": "SRI PETALING",
+    "gtfs_lat": 3.061445,
+    "gtfs_lon": 101.687074,
+    "osm_lat": 3.0614989,
+    "osm_lon": 101.6870879,
+    "difference_meters": 6.2,
+    "osm_name": "Sri Petaling"
+  },
+  {
+    "stop_id": "SP17",
+    "name": "BUKIT JALIL",
+    "gtfs_lat": 3.058196,
+    "gtfs_lon": 101.692125,
+    "osm_lat": 3.0581261,
+    "osm_lon": 101.6921982,
+    "difference_meters": 11.2,
+    "osm_name": "Bukit Jalil"
+  },
+  {
+    "stop_id": "SP16",
+    "name": "SUNGAI BESI",
+    "gtfs_lat": 3.063842,
+    "gtfs_lon": 101.708062,
+    "osm_lat": 3.0639307,
+    "osm_lon": 101.7080538,
+    "difference_meters": 9.9,
+    "osm_name": "Sungai Besi"
+  },
+  {
+    "stop_id": "SP15",
+    "name": "BANDAR TASIK SELATAN",
+    "gtfs_lat": 3.076058,
+    "gtfs_lon": 101.711107,
+    "osm_lat": 3.0761577,
+    "osm_lon": 101.7112369,
+    "difference_meters": 18.2,
+    "osm_name": "Bandar Tasik Selatan"
+  },
+  {
+    "stop_id": "SP14",
+    "name": "BANDAR TUN RAZAK",
+    "gtfs_lat": 3.089576,
+    "gtfs_lon": 101.712466,
+    "osm_lat": 3.089635,
+    "osm_lon": 101.7124347,
+    "difference_meters": 7.4,
+    "osm_name": "Bandar Tun Razak"
+  },
+  {
+    "stop_id": "SP13",
+    "name": "SALAK SELATAN",
+    "gtfs_lat": 3.102201,
+    "gtfs_lon": 101.706179,
+    "osm_lat": 3.1020837,
+    "osm_lon": 101.7062906,
+    "difference_meters": 18.0,
+    "osm_name": "Salak Selatan"
+  },
+  {
+    "stop_id": "SP12",
+    "name": "CHERAS",
+    "gtfs_lat": 3.112609,
+    "gtfs_lon": 101.714178,
+    "osm_lat": 3.1127356,
+    "osm_lon": 101.7143246,
+    "difference_meters": 21.5,
+    "osm_name": "Cheras"
+  },
+  {
+    "stop_id": "SP11",
+    "name": "CHAN SOW LIN",
+    "gtfs_lat": 3.128105,
+    "gtfs_lon": 101.715637,
+    "osm_lat": 3.1277571,
+    "osm_lon": 101.7155705,
+    "difference_meters": 39.4,
+    "osm_name": "Chan Sow Lin"
+  },
+  {
+    "stop_id": "SP10",
+    "name": "PUDU",
+    "gtfs_lat": 3.134879,
+    "gtfs_lon": 101.711957,
+    "osm_lat": 3.1349208,
+    "osm_lon": 101.7120144,
+    "difference_meters": 7.9,
+    "osm_name": "Pudu"
+  },
+  {
+    "stop_id": "SP9",
+    "name": "HANG TUAH",
+    "gtfs_lat": 3.140012,
+    "gtfs_lon": 101.705984,
+    "osm_lat": 3.1398734,
+    "osm_lon": 101.7061576,
+    "difference_meters": 24.7,
+    "osm_name": "Hang Tuah"
+  },
+  {
+    "stop_id": "SP8",
+    "name": "PLAZA RAKYAT",
+    "gtfs_lat": 3.144049,
+    "gtfs_lon": 101.702105,
+    "osm_lat": 3.1445346,
+    "osm_lon": 101.7017675,
+    "difference_meters": 65.7,
+    "osm_name": "Plaza Rakyat"
+  },
+  {
+    "stop_id": "SP7",
+    "name": "MASJID JAMEK",
+    "gtfs_lat": 3.14927,
+    "gtfs_lon": 101.696377,
+    "osm_lat": 3.1499051,
+    "osm_lon": 101.697003,
+    "difference_meters": 99.1,
+    "osm_name": "Masjid Jamek"
+  },
+  {
+    "stop_id": "SP6",
+    "name": "BANDARAYA - UOB",
+    "gtfs_lat": 3.155567,
+    "gtfs_lon": 101.694485,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "SP5",
+    "name": "SULTAN ISMAIL",
+    "gtfs_lat": 3.161245,
+    "gtfs_lon": 101.694109,
+    "osm_lat": 3.1611898,
+    "osm_lon": 101.6940974,
+    "difference_meters": 6.3,
+    "osm_name": "Sultan Ismail"
+  },
+  {
+    "stop_id": "SP4",
+    "name": "PWTC",
+    "gtfs_lat": 3.166333,
+    "gtfs_lon": 101.693586,
+    "osm_lat": 3.1665617,
+    "osm_lon": 101.6935652,
+    "difference_meters": 25.5,
+    "osm_name": "PWTC"
+  },
+  {
+    "stop_id": "SP3",
+    "name": "TITIWANGSA",
+    "gtfs_lat": 3.173497,
+    "gtfs_lon": 101.695367,
+    "osm_lat": 3.173587,
+    "osm_lon": 101.6952529,
+    "difference_meters": 16.1,
+    "osm_name": "Titiwangsa"
+  },
+  {
+    "stop_id": "SP2",
+    "name": "SENTUL",
+    "gtfs_lat": 3.178484,
+    "gtfs_lon": 101.695542,
+    "osm_lat": 3.1785862,
+    "osm_lon": 101.6955056,
+    "difference_meters": 12.1,
+    "osm_name": "Sentul"
+  },
+  {
+    "stop_id": "SP1",
+    "name": "SENTUL TIMUR",
+    "gtfs_lat": 3.185897,
+    "gtfs_lon": 101.695217,
+    "osm_lat": 3.1858245,
+    "osm_lon": 101.6952791,
+    "difference_meters": 10.6,
+    "osm_name": "Sentul Timur"
+  },
+  {
+    "stop_id": "KG04",
+    "name": "KWASA DAMANSARA",
+    "gtfs_lat": 3.176146,
+    "gtfs_lon": 101.572052,
+    "osm_lat": 3.1762262,
+    "osm_lon": 101.5724098,
+    "difference_meters": 40.7,
+    "osm_name": "Kwasa Damansara"
+  },
+  {
+    "stop_id": "KG05",
+    "name": "KWASA SENTRAL",
+    "gtfs_lat": 3.170112,
+    "gtfs_lon": 101.564651,
+    "osm_lat": 3.1698808,
+    "osm_lon": 101.5648201,
+    "difference_meters": 31.8,
+    "osm_name": "Kwasa Sentral"
+  },
+  {
+    "stop_id": "KG06",
+    "name": "KOTA DAMANSARA",
+    "gtfs_lat": 3.150134,
+    "gtfs_lon": 101.57869,
+    "osm_lat": 3.1501771,
+    "osm_lon": 101.5786896,
+    "difference_meters": 4.8,
+    "osm_name": "Kota Damansara"
+  },
+  {
+    "stop_id": "KG07",
+    "name": "SURIAN",
+    "gtfs_lat": 3.14948,
+    "gtfs_lon": 101.593925,
+    "osm_lat": 3.1496339,
+    "osm_lon": 101.5936553,
+    "difference_meters": 34.5,
+    "osm_name": "Surian"
+  },
+  {
+    "stop_id": "KG08",
+    "name": "MUTIARA DAMANSARA",
+    "gtfs_lat": 3.155301,
+    "gtfs_lon": 101.609077,
+    "osm_lat": 3.1552117,
+    "osm_lon": 101.6087346,
+    "difference_meters": 39.3,
+    "osm_name": "Mutiara Damansara"
+  },
+  {
+    "stop_id": "KG09",
+    "name": "BANDAR UTAMA",
+    "gtfs_lat": 3.14671,
+    "gtfs_lon": 101.618599,
+    "osm_lat": 3.1466961,
+    "osm_lon": 101.6187409,
+    "difference_meters": 15.8,
+    "osm_name": "Bandar Utama"
+  },
+  {
+    "stop_id": "KG10",
+    "name": "TAMAN TUN DR ISMAIL",
+    "gtfs_lat": 3.13613,
+    "gtfs_lon": 101.630539,
+    "osm_lat": 3.1360604,
+    "osm_lon": 101.6307785,
+    "difference_meters": 27.7,
+    "osm_name": "Taman Tun Dr Ismail"
+  },
+  {
+    "stop_id": "KG12",
+    "name": "PHILEO DAMANSARA",
+    "gtfs_lat": 3.129864,
+    "gtfs_lon": 101.642471,
+    "osm_lat": 3.1293782,
+    "osm_lon": 101.642981,
+    "difference_meters": 78.3,
+    "osm_name": "Phileo Damansara"
+  },
+  {
+    "stop_id": "KG13",
+    "name": "PUSAT BANDAR DAMANSARA",
+    "gtfs_lat": 3.143444,
+    "gtfs_lon": 101.662857,
+    "osm_lat": 3.1432638,
+    "osm_lon": 101.662351,
+    "difference_meters": 59.6,
+    "osm_name": "Pusat Bandar Damansara"
+  },
+  {
+    "stop_id": "KG14",
+    "name": "SEMANTAN",
+    "gtfs_lat": 3.150977,
+    "gtfs_lon": 101.665497,
+    "osm_lat": 3.1509234,
+    "osm_lon": 101.6653524,
+    "difference_meters": 17.1,
+    "osm_name": "Semantan"
+  },
+  {
+    "stop_id": "KG15",
+    "name": "MUZIUM NEGARA",
+    "gtfs_lat": 3.137317,
+    "gtfs_lon": 101.687336,
+    "osm_lat": 3.137188,
+    "osm_lon": 101.6873589,
+    "difference_meters": 14.6,
+    "osm_name": "Muzium Negara"
+  },
+  {
+    "stop_id": "KG16",
+    "name": "PASAR SENI",
+    "gtfs_lat": 3.142293265,
+    "gtfs_lon": 101.6955642,
+    "osm_lat": 3.1425189,
+    "osm_lon": 101.6953712,
+    "difference_meters": 33.0,
+    "osm_name": "Pasar Seni"
+  },
+  {
+    "stop_id": "KG17",
+    "name": "MERDEKA",
+    "gtfs_lat": 3.141969,
+    "gtfs_lon": 101.70205,
+    "osm_lat": 3.1420586,
+    "osm_lon": 101.7022083,
+    "difference_meters": 20.2,
+    "osm_name": "Merdeka"
+  },
+  {
+    "stop_id": "KG18A",
+    "name": "BUKIT BINTANG ",
+    "gtfs_lat": 3.146503,
+    "gtfs_lon": 101.710947,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "KG20",
+    "name": "TUN RAZAK EXCHANGE",
+    "gtfs_lat": 3.142403,
+    "gtfs_lon": 101.720156,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "KG21",
+    "name": "COCHRANE",
+    "gtfs_lat": 3.132829,
+    "gtfs_lon": 101.722962,
+    "osm_lat": 3.132384,
+    "osm_lon": 101.7231513,
+    "difference_meters": 53.8,
+    "osm_name": "Cochrane"
+  },
+  {
+    "stop_id": "KG22",
+    "name": "MALURI",
+    "gtfs_lat": 3.123623,
+    "gtfs_lon": 101.727809,
+    "osm_lat": 3.1232922,
+    "osm_lon": 101.7269337,
+    "difference_meters": 103.9,
+    "osm_name": "Maluri"
+  },
+  {
+    "stop_id": "KG23",
+    "name": "TAMAN PERTAMA",
+    "gtfs_lat": 3.112547,
+    "gtfs_lon": 101.729371,
+    "osm_lat": 3.1126489,
+    "osm_lon": 101.7293427,
+    "difference_meters": 11.8,
+    "osm_name": "Taman Pertama"
+  },
+  {
+    "stop_id": "KG24",
+    "name": "TAMAN MIDAH",
+    "gtfs_lat": 3.104505,
+    "gtfs_lon": 101.732186,
+    "osm_lat": 3.1043689,
+    "osm_lon": 101.7322944,
+    "difference_meters": 19.3,
+    "osm_name": "Taman Midah"
+  },
+  {
+    "stop_id": "KG25",
+    "name": "TAMAN MUTIARA",
+    "gtfs_lat": 3.090989,
+    "gtfs_lon": 101.740453,
+    "osm_lat": 3.0913923,
+    "osm_lon": 101.7403451,
+    "difference_meters": 46.4,
+    "osm_name": "Taman Mutiara"
+  },
+  {
+    "stop_id": "KG26",
+    "name": "TAMAN CONNAUGHT",
+    "gtfs_lat": 3.079172,
+    "gtfs_lon": 101.74522,
+    "osm_lat": 3.0791684,
+    "osm_lon": 101.7451366,
+    "difference_meters": 9.3,
+    "osm_name": "Taman Connaught"
+  },
+  {
+    "stop_id": "KG27",
+    "name": "TAMAN SUNTEX",
+    "gtfs_lat": 3.071578,
+    "gtfs_lon": 101.763552,
+    "osm_lat": 3.0716636,
+    "osm_lon": 101.7635488,
+    "difference_meters": 9.5,
+    "osm_name": "Taman Suntex"
+  },
+  {
+    "stop_id": "KG28",
+    "name": "SRI RAYA",
+    "gtfs_lat": 3.062273,
+    "gtfs_lon": 101.772899,
+    "osm_lat": 3.0621901,
+    "osm_lon": 101.7729934,
+    "difference_meters": 14.0,
+    "osm_name": "Sri Raya"
+  },
+  {
+    "stop_id": "KG29",
+    "name": "BANDAR TUN HUSSEIN ONN",
+    "gtfs_lat": 3.048223,
+    "gtfs_lon": 101.775109,
+    "osm_lat": 3.0483736,
+    "osm_lon": 101.77504,
+    "difference_meters": 18.4,
+    "osm_name": "Bandar Tun Hussein Onn"
+  },
+  {
+    "stop_id": "KG30",
+    "name": "BATU 11 CHERAS",
+    "gtfs_lat": 3.041339,
+    "gtfs_lon": 101.773383,
+    "osm_lat": 3.0413221,
+    "osm_lon": 101.7734006,
+    "difference_meters": 2.7,
+    "osm_name": "Batu 11 Cheras"
+  },
+  {
+    "stop_id": "KG31",
+    "name": "BUKIT DUKUNG",
+    "gtfs_lat": 3.026413,
+    "gtfs_lon": 101.771072,
+    "osm_lat": 3.0264269,
+    "osm_lon": 101.7710834,
+    "difference_meters": 2.0,
+    "osm_name": "Bukit Dukung"
+  },
+  {
+    "stop_id": "KG33",
+    "name": "SUNGAI JERNIH",
+    "gtfs_lat": 3.000948,
+    "gtfs_lon": 101.783857,
+    "osm_lat": 3.0008035,
+    "osm_lon": 101.7840774,
+    "difference_meters": 29.3,
+    "osm_name": "Sungai Jernih"
+  },
+  {
+    "stop_id": "KG34",
+    "name": "STADIUM KAJANG",
+    "gtfs_lat": 2.994514,
+    "gtfs_lon": 101.786338,
+    "osm_lat": 2.9940951,
+    "osm_lon": 101.786258,
+    "difference_meters": 47.4,
+    "osm_name": "Stadium Kajang"
+  },
+  {
+    "stop_id": "KG35",
+    "name": "KAJANG",
+    "gtfs_lat": 2.982778,
+    "gtfs_lon": 101.790278,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "PY01",
+    "name": "KWASA DAMANSARA",
+    "gtfs_lat": 3.1763324,
+    "gtfs_lon": 101.5721456,
+    "osm_lat": 3.1762843,
+    "osm_lon": 101.572394,
+    "difference_meters": 28.1,
+    "osm_name": "Kwasa Damansara"
+  },
+  {
+    "stop_id": "PY03",
+    "name": "KAMPUNG SELAMAT",
+    "gtfs_lat": 3.197266,
+    "gtfs_lon": 101.578499,
+    "osm_lat": 3.1971535,
+    "osm_lon": 101.578433,
+    "difference_meters": 14.5,
+    "osm_name": "Kampung Selamat"
+  },
+  {
+    "stop_id": "PY04",
+    "name": "SUNGAI BULOH",
+    "gtfs_lat": 3.206429,
+    "gtfs_lon": 101.581779,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "PY05",
+    "name": "DAMANSARA DAMAI",
+    "gtfs_lat": 3.199892,
+    "gtfs_lon": 101.592623,
+    "osm_lat": 3.1998294,
+    "osm_lon": 101.5929229,
+    "difference_meters": 34.0,
+    "osm_name": "Damansara Damai"
+  },
+  {
+    "stop_id": "PY06",
+    "name": "SRI DAMANSARA BARAT",
+    "gtfs_lat": 3.198197,
+    "gtfs_lon": 101.608302,
+    "osm_lat": 3.1981606,
+    "osm_lon": 101.608413,
+    "difference_meters": 13.0,
+    "osm_name": "Sri Damansara Barat"
+  },
+  {
+    "stop_id": "PY07",
+    "name": "SRI DAMANSARA SENTRAL",
+    "gtfs_lat": 3.198815,
+    "gtfs_lon": 101.621396,
+    "osm_lat": 3.1985883,
+    "osm_lon": 101.6211352,
+    "difference_meters": 38.4,
+    "osm_name": "Sri Damansara Sentral"
+  },
+  {
+    "stop_id": "PY08",
+    "name": "SRI DAMANSARA TIMUR",
+    "gtfs_lat": 3.207832,
+    "gtfs_lon": 101.628716,
+    "osm_lat": 3.2075902,
+    "osm_lon": 101.6286753,
+    "difference_meters": 27.3,
+    "osm_name": "Sri Damansara Timur"
+  },
+  {
+    "stop_id": "PY09",
+    "name": "METRO PRIMA",
+    "gtfs_lat": 3.214438,
+    "gtfs_lon": 101.639402,
+    "osm_lat": 3.2145991,
+    "osm_lon": 101.6403808,
+    "difference_meters": 110.1,
+    "osm_name": "Metro Prima"
+  },
+  {
+    "stop_id": "PY10",
+    "name": "KEPONG BARU",
+    "gtfs_lat": 3.211663,
+    "gtfs_lon": 101.648193,
+    "osm_lat": 3.2116171,
+    "osm_lon": 101.6481367,
+    "difference_meters": 8.1,
+    "osm_name": "Kepong Baru"
+  },
+  {
+    "stop_id": "PY11",
+    "name": "JINJANG",
+    "gtfs_lat": 3.209544,
+    "gtfs_lon": 101.655829,
+    "osm_lat": 3.2096165,
+    "osm_lon": 101.6559176,
+    "difference_meters": 12.7,
+    "osm_name": "Jinjang"
+  },
+  {
+    "stop_id": "PY12",
+    "name": "SRI DELIMA",
+    "gtfs_lat": 3.207108,
+    "gtfs_lon": 101.665749,
+    "osm_lat": 3.207121,
+    "osm_lon": 101.6655589,
+    "difference_meters": 21.2,
+    "osm_name": "Sri Delima"
+  },
+  {
+    "stop_id": "PY13",
+    "name": "KAMPUNG BATU",
+    "gtfs_lat": 3.205521,
+    "gtfs_lon": 101.675473,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "PY14",
+    "name": "KENTOMEN",
+    "gtfs_lat": 3.19563,
+    "gtfs_lon": 101.6797,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "PY15",
+    "name": "JALAN IPOH",
+    "gtfs_lat": 3.189319,
+    "gtfs_lon": 101.681145,
+    "osm_lat": 3.1894372,
+    "osm_lon": 101.681171,
+    "difference_meters": 13.5,
+    "osm_name": "Jalan Ipoh"
+  },
+  {
+    "stop_id": "PY16",
+    "name": "SENTUL BARAT",
+    "gtfs_lat": 3.179369,
+    "gtfs_lon": 101.684742,
+    "osm_lat": 3.1788143,
+    "osm_lon": 101.6852328,
+    "difference_meters": 82.3,
+    "osm_name": "Sentul Barat"
+  },
+  {
+    "stop_id": "PY17",
+    "name": "TITIWANGSA",
+    "gtfs_lat": 3.17408,
+    "gtfs_lon": 101.69581,
+    "osm_lat": 3.173587,
+    "osm_lon": 101.6952529,
+    "difference_meters": 82.6,
+    "osm_name": "Titiwangsa"
+  },
+  {
+    "stop_id": "PY18",
+    "name": "HOSPITAL KUALA LUMPUR",
+    "gtfs_lat": 3.17405,
+    "gtfs_lon": 101.70239,
+    "osm_lat": 3.1741536,
+    "osm_lon": 101.701762,
+    "difference_meters": 70.7,
+    "osm_name": "Hospital Kuala Lumpur"
+  },
+  {
+    "stop_id": "PY19",
+    "name": "RAJA UDA",
+    "gtfs_lat": 3.16794,
+    "gtfs_lon": 101.71017,
+    "osm_lat": 3.1679366,
+    "osm_lon": 101.7109297,
+    "difference_meters": 84.3,
+    "osm_name": "Raja Uda"
+  },
+  {
+    "stop_id": "PY20",
+    "name": "AMPANG PARK",
+    "gtfs_lat": 3.16225,
+    "gtfs_lon": 101.71781,
+    "osm_lat": 3.1617428,
+    "osm_lon": 101.7180106,
+    "difference_meters": 60.6,
+    "osm_name": "Ampang Park"
+  },
+  {
+    "stop_id": "PY21",
+    "name": "PERSIARAN KLCC",
+    "gtfs_lat": 3.15712,
+    "gtfs_lon": 101.71834,
+    "osm_lat": 3.1568033,
+    "osm_lon": 101.7182239,
+    "difference_meters": 37.5,
+    "osm_name": "Persiaran KLCC"
+  },
+  {
+    "stop_id": "PY22",
+    "name": "CONLAY",
+    "gtfs_lat": 3.15145,
+    "gtfs_lon": 101.71801,
+    "osm_lat": 3.1506171,
+    "osm_lon": 101.718367,
+    "difference_meters": 100.7,
+    "osm_name": "Conlay"
+  },
+  {
+    "stop_id": "PY23",
+    "name": "TUN RAZAK EXCHANGE",
+    "gtfs_lat": 3.14289,
+    "gtfs_lon": 101.72034,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "PY24",
+    "name": "CHAN SOW LIN",
+    "gtfs_lat": 3.12839,
+    "gtfs_lon": 101.71663,
+    "osm_lat": 3.1282865,
+    "osm_lon": 101.7166324,
+    "difference_meters": 11.5,
+    "osm_name": "Chan Sow Lin"
+  },
+  {
+    "stop_id": "PY27",
+    "name": "KUCHAI",
+    "gtfs_lat": 3.089546,
+    "gtfs_lon": 101.694124,
+    "osm_lat": 3.0895853,
+    "osm_lon": 101.6941916,
+    "difference_meters": 8.7,
+    "osm_name": "Kuchai"
+  },
+  {
+    "stop_id": "PY28",
+    "name": "TAMAN NAGA EMAS",
+    "gtfs_lat": 3.077688,
+    "gtfs_lon": 101.699867,
+    "osm_lat": 3.0777471,
+    "osm_lon": 101.6996047,
+    "difference_meters": 29.9,
+    "osm_name": "Taman Naga Emas"
+  },
+  {
+    "stop_id": "PY29",
+    "name": "SUNGAI BESI",
+    "gtfs_lat": 3.063737,
+    "gtfs_lon": 101.7084,
+    "osm_lat": 3.0638443,
+    "osm_lon": 101.7083805,
+    "difference_meters": 12.1,
+    "osm_name": "Sungai Besi"
+  },
+  {
+    "stop_id": "PY31",
+    "name": "SERDANG RAYA UTARA",
+    "gtfs_lat": 3.041674,
+    "gtfs_lon": 101.704928,
+    "osm_lat": 3.0417215,
+    "osm_lon": 101.7048624,
+    "difference_meters": 9.0,
+    "osm_name": "Serdang Raya Utara"
+  },
+  {
+    "stop_id": "PY32",
+    "name": "SERDANG RAYA SELATAN",
+    "gtfs_lat": 3.028463,
+    "gtfs_lon": 101.707514,
+    "osm_lat": 3.028431,
+    "osm_lon": 101.707449,
+    "difference_meters": 8.0,
+    "osm_name": "Serdang Raya Selatan"
+  },
+  {
+    "stop_id": "PY33",
+    "name": "SERDANG JAYA",
+    "gtfs_lat": 3.0216,
+    "gtfs_lon": 101.709,
+    "osm_lat": 3.0215373,
+    "osm_lon": 101.7090047,
+    "difference_meters": 7.0,
+    "osm_name": "Serdang Jaya"
+  },
+  {
+    "stop_id": "PY34",
+    "name": "UPM",
+    "gtfs_lat": 3.008489,
+    "gtfs_lon": 101.705396,
+    "osm_lat": 3.0084403,
+    "osm_lon": 101.7053906,
+    "difference_meters": 5.4,
+    "osm_name": "UPM"
+  },
+  {
+    "stop_id": "PY36",
+    "name": "TAMAN EQUINE",
+    "gtfs_lat": 2.98942,
+    "gtfs_lon": 101.67244,
+    "osm_lat": 2.9894052,
+    "osm_lon": 101.672542,
+    "difference_meters": 11.4,
+    "osm_name": "Taman Equine"
+  },
+  {
+    "stop_id": "PY37",
+    "name": "PUTRA PERMAI",
+    "gtfs_lat": 2.98339,
+    "gtfs_lon": 101.66099,
+    "osm_lat": 2.9831751,
+    "osm_lon": 101.6605458,
+    "difference_meters": 54.8,
+    "osm_name": "Putra Permai"
+  },
+  {
+    "stop_id": "PY38",
+    "name": "16 SIERRA",
+    "gtfs_lat": 2.964974,
+    "gtfs_lon": 101.654812,
+    "osm_lat": 2.9652512,
+    "osm_lon": 101.6547969,
+    "difference_meters": 30.9,
+    "osm_name": "16 Sierra"
+  },
+  {
+    "stop_id": "PY39",
+    "name": "CYBERJAYA UTARA",
+    "gtfs_lat": 2.95,
+    "gtfs_lon": 101.6573,
+    "osm_lat": 2.9492091,
+    "osm_lon": 101.6574277,
+    "difference_meters": 89.1,
+    "osm_name": "Cyberjaya Utara"
+  },
+  {
+    "stop_id": "PY40",
+    "name": "CYBERJAYA CITY CENTRE",
+    "gtfs_lat": 2.9384,
+    "gtfs_lon": 101.6659,
+    "osm_lat": 2.9388527,
+    "osm_lon": 101.665598,
+    "difference_meters": 60.5,
+    "osm_name": "Cyberjaya City Centre"
+  },
+  {
+    "stop_id": "PY41",
+    "name": "PUTRAJAYA SENTRAL",
+    "gtfs_lat": 2.9313,
+    "gtfs_lon": 101.6715,
+    "osm_lat": 2.9313738,
+    "osm_lon": 101.671549,
+    "difference_meters": 9.8,
+    "osm_name": "Putrajaya Sentral"
+  },
+  {
+    "stop_id": "MR1",
+    "name": "KL SENTRAL",
+    "gtfs_lat": 3.132852,
+    "gtfs_lon": 101.687817,
+    "osm_lat": 3.132935,
+    "osm_lon": 101.6877056,
+    "difference_meters": 15.4,
+    "osm_name": "KL Sentral"
+  },
+  {
+    "stop_id": "MR2",
+    "name": "TUN SAMBANTHAN",
+    "gtfs_lat": 3.13132,
+    "gtfs_lon": 101.69085,
+    "osm_lat": 3.1314419,
+    "osm_lon": 101.6908882,
+    "difference_meters": 14.2,
+    "osm_name": "Tun Sambanthan"
+  },
+  {
+    "stop_id": "MR3",
+    "name": "MAHARAJALELA",
+    "gtfs_lat": 3.138743,
+    "gtfs_lon": 101.699268,
+    "osm_lat": 3.1389205,
+    "osm_lon": 101.6991762,
+    "difference_meters": 22.2,
+    "osm_name": "Maharajalela"
+  },
+  {
+    "stop_id": "MR4",
+    "name": "HANG TUAH",
+    "gtfs_lat": 3.140511,
+    "gtfs_lon": 101.706029,
+    "osm_lat": 3.1406667,
+    "osm_lon": 101.7060444,
+    "difference_meters": 17.4,
+    "osm_name": "Hang Tuah"
+  },
+  {
+    "stop_id": "MR5",
+    "name": "IMBI",
+    "gtfs_lat": 3.14283,
+    "gtfs_lon": 101.70945,
+    "osm_lat": 3.142812,
+    "osm_lon": 101.7094467,
+    "difference_meters": 2.0,
+    "osm_name": "Imbi"
+  },
+  {
+    "stop_id": "MR6",
+    "name": "BUKIT BINTANG ",
+    "gtfs_lat": 3.146022,
+    "gtfs_lon": 101.7115,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "MR7",
+    "name": "RAJA CHULAN",
+    "gtfs_lat": 3.150878,
+    "gtfs_lon": 101.710432,
+    "osm_lat": 3.1508369,
+    "osm_lon": 101.710448,
+    "difference_meters": 4.9,
+    "osm_name": "Raja Chulan"
+  },
+  {
+    "stop_id": "MR8",
+    "name": "BUKIT NANAS",
+    "gtfs_lat": 3.156214,
+    "gtfs_lon": 101.704809,
+    "osm_lat": 3.1561402,
+    "osm_lon": 101.7048306,
+    "difference_meters": 8.5,
+    "osm_name": "Bukit Nanas"
+  },
+  {
+    "stop_id": "MR9",
+    "name": "MEDAN TUANKU",
+    "gtfs_lat": 3.15935,
+    "gtfs_lon": 101.69888,
+    "osm_lat": 3.1592803,
+    "osm_lon": 101.6989008,
+    "difference_meters": 8.1,
+    "osm_name": "Medan Tuanku"
+  },
+  {
+    "stop_id": "MR10",
+    "name": "CHOW KIT",
+    "gtfs_lat": 3.167358,
+    "gtfs_lon": 101.698379,
+    "osm_lat": 3.1673939,
+    "osm_lon": 101.6983848,
+    "difference_meters": 4.0,
+    "osm_name": "Chow Kit"
+  },
+  {
+    "stop_id": "MR11",
+    "name": "TITIWANGSA",
+    "gtfs_lat": 3.173192,
+    "gtfs_lon": 101.696022,
+    "osm_lat": 3.1732286,
+    "osm_lon": 101.6959497,
+    "difference_meters": 9.0,
+    "osm_name": "Titiwangsa"
+  },
+  {
+    "stop_id": "BRT1",
+    "name": "SUNWAY-SETIA JAYA",
+    "gtfs_lat": 3.0828,
+    "gtfs_lon": 101.6123,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "BRT2",
+    "name": "MENTARI",
+    "gtfs_lat": 3.0761,
+    "gtfs_lon": 101.6101,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "BRT3",
+    "name": "SUNWAY LAGOON ",
+    "gtfs_lat": 3.0706,
+    "gtfs_lon": 101.6107,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "BRT4",
+    "name": "SUNMED",
+    "gtfs_lat": 3.0656,
+    "gtfs_lon": 101.6087,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "BRT5",
+    "name": "SunU-Monash",
+    "gtfs_lat": 3.0654,
+    "gtfs_lon": 101.6016,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "BRT6",
+    "name": "SOUTH QUAY-USJ 1",
+    "gtfs_lat": 3.0617,
+    "gtfs_lon": 101.5969,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "BRT7",
+    "name": "USJ7",
+    "gtfs_lat": 3.0553,
+    "gtfs_lon": 101.5919,
+    "osm_lat": 3.0548355,
+    "osm_lon": 101.591941,
+    "difference_meters": 51.9,
+    "osm_name": "USJ7"
+  },
+  {
+    "stop_id": "SA1",
+    "name": "BANDAR UTAMA",
+    "gtfs_lat": 3.144722,
+    "gtfs_lon": 101.618611,
+    "osm_lat": 3.1449108,
+    "osm_lon": 101.6188601,
+    "difference_meters": 34.7,
+    "osm_name": "Bandar Utama"
+  },
+  {
+    "stop_id": "SA2",
+    "name": "KAYU ARA",
+    "gtfs_lat": 3.134722,
+    "gtfs_lon": 101.616667,
+    "osm_lat": 3.1348622142857145,
+    "osm_lon": 101.61679848571428,
+    "difference_meters": 21.4,
+    "osm_name": "Kayu Ara"
+  },
+  {
+    "stop_id": "SA3",
+    "name": "BANDAR UTAMA 11",
+    "gtfs_lat": 3.133333,
+    "gtfs_lon": 101.604444,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "SA5",
+    "name": "DAMANSARA IDAMAN",
+    "gtfs_lat": 3.122778,
+    "gtfs_lon": 101.594167,
+    "osm_lat": 3.12275239,
+    "osm_lon": 101.59418573,
+    "difference_meters": 3.5,
+    "osm_name": "Damansara Idaman"
+  },
+  {
+    "stop_id": "SA6",
+    "name": "SUBANG",
+    "gtfs_lat": 3.106111,
+    "gtfs_lon": 101.591111,
+    "osm_lat": 3.1061524,
+    "osm_lon": 101.59121698,
+    "difference_meters": 12.6,
+    "osm_name": "Subang"
+  },
+  {
+    "stop_id": "SA7",
+    "name": "GLENMARIE 2",
+    "gtfs_lat": 3.095278,
+    "gtfs_lon": 101.588611,
+    "osm_lat": 3.0953491,
+    "osm_lon": 101.5888179,
+    "difference_meters": 24.3,
+    "osm_name": "Glenmarie 2"
+  },
+  {
+    "stop_id": "SA9",
+    "name": "KERJAYA",
+    "gtfs_lat": 3.082222,
+    "gtfs_lon": 101.561944,
+    "osm_lat": 3.0822994,
+    "osm_lon": 101.5619731,
+    "difference_meters": 9.2,
+    "osm_name": "Kerjaya"
+  },
+  {
+    "stop_id": "SA10",
+    "name": "STADIUM SHAH ALAM",
+    "gtfs_lat": 3.079722,
+    "gtfs_lon": 101.548889,
+    "osm_lat": 3.07995735,
+    "osm_lon": 101.54911960000001,
+    "difference_meters": 36.6,
+    "osm_name": "Stadium Shah Alam"
+  },
+  {
+    "stop_id": "SA12",
+    "name": "DATO' MENTERI - SA SENTRAL",
+    "gtfs_lat": 3.069722,
+    "gtfs_lon": 101.521111,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "SA14",
+    "name": "UITM SHAH ALAM",
+    "gtfs_lat": 3.0625,
+    "gtfs_lon": 101.501111,
+    "osm_lat": 3.0627264,
+    "osm_lon": 101.5011682,
+    "difference_meters": 26.0,
+    "osm_name": "UiTM Shah Alam"
+  },
+  {
+    "stop_id": "SA15",
+    "name": "SEKSYEN 7",
+    "gtfs_lat": 3.067222,
+    "gtfs_lon": 101.486667,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "SA17",
+    "name": "BANDAR BARU KLANG",
+    "gtfs_lat": 3.0625,
+    "gtfs_lon": 101.465556,
+    "osm_lat": 3.0626787333333336,
+    "osm_lon": 101.46582468333334,
+    "difference_meters": 35.8,
+    "osm_name": "Bandar Baru Klang"
+  },
+  {
+    "stop_id": "SA18",
+    "name": "PASAR KLANG",
+    "gtfs_lat": 3.067778,
+    "gtfs_lon": 101.450833,
+    "osm_lat": 3.0679254,
+    "osm_lon": 101.4508251,
+    "difference_meters": 16.4,
+    "osm_name": "Pasar Klang"
+  },
+  {
+    "stop_id": "SA19",
+    "name": "JALAN MERU",
+    "gtfs_lat": 3.058889,
+    "gtfs_lon": 101.451944,
+    "osm_lat": 3.058885985714286,
+    "osm_lon": 101.45199837142857,
+    "difference_meters": 6.0,
+    "osm_name": "Jalan Meru"
+  },
+  {
+    "stop_id": "SA20",
+    "name": "JAMBATAN KOTA",
+    "gtfs_lat": 3.047222,
+    "gtfs_lon": 101.4475,
+    "osm_lat": 3.0473619571428574,
+    "osm_lon": 101.44748938571429,
+    "difference_meters": 15.6,
+    "osm_name": "Jambatan Kota"
+  },
+  {
+    "stop_id": "SA21",
+    "name": "TAMAN SELATAN",
+    "gtfs_lat": 3.026667,
+    "gtfs_lon": 101.442222,
+    "osm_lat": 3.0268463,
+    "osm_lon": 101.4423378,
+    "difference_meters": 23.7,
+    "osm_name": "Taman Selatan"
+  },
+  {
+    "stop_id": "SA22",
+    "name": "SERI ANDALAS",
+    "gtfs_lat": 3.015833,
+    "gtfs_lon": 101.440556,
+    "osm_lat": 3.015912442857143,
+    "osm_lon": 101.44069837142857,
+    "difference_meters": 18.1,
+    "osm_name": "Seri Andalas"
+  },
+  {
+    "stop_id": "SA23",
+    "name": "KLANG JAYA",
+    "gtfs_lat": 3.005278,
+    "gtfs_lon": 101.441667,
+    "osm_lat": 3.005333828571428,
+    "osm_lon": 101.44182414285714,
+    "difference_meters": 18.5,
+    "osm_name": "Klang Jaya"
+  },
+  {
+    "stop_id": "SA24",
+    "name": "BANDAR BUKIT TINGGI",
+    "gtfs_lat": 2.993056,
+    "gtfs_lon": 101.445833,
+    "osm_lat": 2.993149916666667,
+    "osm_lon": 101.44597446666667,
+    "difference_meters": 18.9,
+    "osm_name": "Bandar Bukit Tinggi"
+  },
+  {
+    "stop_id": "SA26",
+    "name": "JOHAN SETIA",
+    "gtfs_lat": 2.976111,
+    "gtfs_lon": 101.459167,
+    "osm_lat": 2.9763664,
+    "osm_lon": 101.4593038,
+    "difference_meters": 32.2,
+    "osm_name": "Johan Setia"
+  },
+  {
+    "stop_id": "50500",
+    "name": "Taman Wahyu",
+    "gtfs_lat": 3.21451,
+    "gtfs_lon": 101.672178,
+    "osm_lat": 3.2145295,
+    "osm_lon": 101.6721673,
+    "difference_meters": 2.5,
+    "osm_name": "Taman Wahyu"
+  },
+  {
+    "stop_id": "50600",
+    "name": "BATU CAVES",
+    "gtfs_lat": 3.237796,
+    "gtfs_lon": 101.681215,
+    "osm_lat": 3.2378206,
+    "osm_lon": 101.681192,
+    "difference_meters": 3.7,
+    "osm_name": "Batu Caves"
+  },
+  {
+    "stop_id": "52800",
+    "name": "Angkasapuri",
+    "gtfs_lat": 3.113212,
+    "gtfs_lon": 101.673367,
+    "osm_lat": 3.1133137,
+    "osm_lon": 101.6732863,
+    "difference_meters": 14.4,
+    "osm_name": "Angkasapuri"
+  },
+  {
+    "stop_id": "52900",
+    "name": "Pantai Dalam",
+    "gtfs_lat": 3.095607,
+    "gtfs_lon": 101.669927,
+    "osm_lat": 3.0956067,
+    "osm_lon": 101.670009,
+    "difference_meters": 9.1,
+    "osm_name": "Pantai Dalam"
+  },
+  {
+    "stop_id": "53000",
+    "name": "PETALING",
+    "gtfs_lat": 3.086485,
+    "gtfs_lon": 101.664338,
+    "osm_lat": 3.0862369,
+    "osm_lon": 101.664166,
+    "difference_meters": 33.6,
+    "osm_name": "Petaling"
+  },
+  {
+    "stop_id": "54500",
+    "name": "Bukit Badak",
+    "gtfs_lat": 3.036147,
+    "gtfs_lon": 101.470176,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "54700",
+    "name": "KLANG",
+    "gtfs_lat": 3.043078,
+    "gtfs_lon": 101.449543,
+    "osm_lat": 3.0431209,
+    "osm_lon": 101.449963,
+    "difference_meters": 46.9,
+    "osm_name": "Klang"
+  },
+  {
+    "stop_id": "50400",
+    "name": "Kampung Batu",
+    "gtfs_lat": 3.204892,
+    "gtfs_lon": 101.675584,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "53600",
+    "name": "SETIA JAYA",
+    "gtfs_lat": 3.083373,
+    "gtfs_lon": 101.61143,
+    "osm_lat": 3.083194,
+    "osm_lon": 101.6114416,
+    "difference_meters": 19.9,
+    "osm_name": "Setia Jaya"
+  },
+  {
+    "stop_id": "53700",
+    "name": "SUBANG JAYA",
+    "gtfs_lat": 3.084554,
+    "gtfs_lon": 101.587373,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "50000",
+    "name": "SENTUL",
+    "gtfs_lat": 3.183581,
+    "gtfs_lon": 101.688802,
+    "osm_lat": 3.1823091,
+    "osm_lon": 101.6887161,
+    "difference_meters": 141.8,
+    "osm_name": "Sentul"
+  },
+  {
+    "stop_id": "15200",
+    "name": "TANJUNG MALIM",
+    "gtfs_lat": 3.685142,
+    "gtfs_lon": 101.518165,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "17300",
+    "name": "Serendah",
+    "gtfs_lat": 3.376172,
+    "gtfs_lon": 101.614532,
+    "osm_lat": 3.376064,
+    "osm_lon": 101.6144393,
+    "difference_meters": 15.8,
+    "osm_name": "Serendah"
+  },
+  {
+    "stop_id": "17800",
+    "name": "RAWANG",
+    "gtfs_lat": 3.318955,
+    "gtfs_lon": 101.575012,
+    "osm_lat": 3.3194747,
+    "osm_lon": 101.5748537,
+    "difference_meters": 60.4,
+    "osm_name": "Rawang"
+  },
+  {
+    "stop_id": "16100",
+    "name": "KUALA KUBU BARU",
+    "gtfs_lat": 3.553215,
+    "gtfs_lon": 101.639591,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "18500",
+    "name": "SUNGAI BULUH",
+    "gtfs_lat": 3.206356,
+    "gtfs_lon": 101.580128,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "18600",
+    "name": "KEPONG",
+    "gtfs_lat": 3.202996,
+    "gtfs_lon": 101.637381,
+    "osm_lat": 3.2027324,
+    "osm_lon": 101.6373342,
+    "difference_meters": 29.8,
+    "osm_name": "Kepong"
+  },
+  {
+    "stop_id": "18700",
+    "name": "Segambut",
+    "gtfs_lat": 3.186514,
+    "gtfs_lon": 101.664032,
+    "osm_lat": 3.1864172,
+    "osm_lon": 101.6641977,
+    "difference_meters": 21.3,
+    "osm_name": "Segambut"
+  },
+  {
+    "stop_id": "18800",
+    "name": "Putra",
+    "gtfs_lat": 3.165399,
+    "gtfs_lon": 101.691101,
+    "osm_lat": 3.1656177,
+    "osm_lon": 101.690761,
+    "difference_meters": 44.9,
+    "osm_name": "Putra"
+  },
+  {
+    "stop_id": "18900",
+    "name": "Bank Negara",
+    "gtfs_lat": 3.155105,
+    "gtfs_lon": 101.693118,
+    "osm_lat": 3.1545485,
+    "osm_lon": 101.6930004,
+    "difference_meters": 63.2,
+    "osm_name": "Bank Negara"
+  },
+  {
+    "stop_id": "19000",
+    "name": "KUALA LUMPUR",
+    "gtfs_lat": 3.139444,
+    "gtfs_lon": 101.693333,
+    "osm_lat": 3.1395792,
+    "osm_lon": 101.6935843,
+    "difference_meters": 31.7,
+    "osm_name": "Kuala Lumpur"
+  },
+  {
+    "stop_id": "15400",
+    "name": "KALUMPANG",
+    "gtfs_lat": 3.5566,
+    "gtfs_lon": 101.5612,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "19100",
+    "name": "KL SENTRAL",
+    "gtfs_lat": 3.134167,
+    "gtfs_lon": 101.686111,
+    "osm_lat": 3.134321786956522,
+    "osm_lon": 101.68638908695651,
+    "difference_meters": 35.3,
+    "osm_name": "KL Sentral"
+  },
+  {
+    "stop_id": "19300",
+    "name": "Seputih",
+    "gtfs_lat": 3.113612,
+    "gtfs_lon": 101.681474,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "19400",
+    "name": "SALAK SELATAN",
+    "gtfs_lat": 3.098413,
+    "gtfs_lon": 101.705055,
+    "osm_lat": 3.0981912,
+    "osm_lon": 101.7053393,
+    "difference_meters": 40.1,
+    "osm_name": "Salak Selatan"
+  },
+  {
+    "stop_id": "19600",
+    "name": "BANDAR TASEK (S)",
+    "gtfs_lat": 3.076229,
+    "gtfs_lon": 101.711119,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "19900",
+    "name": "SERDANG",
+    "gtfs_lat": 3.023404,
+    "gtfs_lon": 101.716056,
+    "osm_lat": 3.0232024,
+    "osm_lon": 101.7159912,
+    "difference_meters": 23.5,
+    "osm_name": "Serdang"
+  },
+  {
+    "stop_id": "20400",
+    "name": "KAJANG",
+    "gtfs_lat": 2.983222,
+    "gtfs_lon": 101.790669,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "20500",
+    "name": "UKM",
+    "gtfs_lat": 2.939775,
+    "gtfs_lon": 101.787623,
+    "osm_lat": 2.939666,
+    "osm_lon": 101.7878557,
+    "difference_meters": 28.5,
+    "osm_name": "UKM"
+  },
+  {
+    "stop_id": "20900",
+    "name": "BANGI",
+    "gtfs_lat": 2.904467,
+    "gtfs_lon": 101.785943,
+    "osm_lat": 2.9040583,
+    "osm_lon": 101.7862548,
+    "difference_meters": 57.1,
+    "osm_name": "Bangi"
+  },
+  {
+    "stop_id": "21300",
+    "name": "BATANG BENAR",
+    "gtfs_lat": 2.829904,
+    "gtfs_lon": 101.826655,
+    "osm_lat": 2.8303998,
+    "osm_lon": 101.8267661,
+    "difference_meters": 56.5,
+    "osm_name": "Batang Benar"
+  },
+  {
+    "stop_id": "18100",
+    "name": "KUANG",
+    "gtfs_lat": 3.258267,
+    "gtfs_lon": 101.554794,
+    "osm_lat": 3.2581858,
+    "osm_lon": 101.5547582,
+    "difference_meters": 9.9,
+    "osm_name": "Kuang"
+  },
+  {
+    "stop_id": "22400",
+    "name": "Tiroi",
+    "gtfs_lat": 2.741459,
+    "gtfs_lon": 101.871914,
+    "osm_lat": 2.7413321,
+    "osm_lon": 101.8719879,
+    "difference_meters": 16.3,
+    "osm_name": "Tiroi"
+  },
+  {
+    "stop_id": "22700",
+    "name": "SEREMBAN",
+    "gtfs_lat": 2.719169,
+    "gtfs_lon": 101.940792,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "23900",
+    "name": "Rembau",
+    "gtfs_lat": 2.593055,
+    "gtfs_lon": 102.094653,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "25100",
+    "name": "Pulau Sebang (Tampin)",
+    "gtfs_lat": 2.46396,
+    "gtfs_lon": 102.226308,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "21500",
+    "name": "Nilai",
+    "gtfs_lat": 2.802356,
+    "gtfs_lon": 101.799303,
+    "osm_lat": 2.8023566,
+    "osm_lon": 101.7997818,
+    "difference_meters": 53.2,
+    "osm_name": "Nilai"
+  },
+  {
+    "stop_id": "22000",
+    "name": "LABU",
+    "gtfs_lat": 2.754501,
+    "gtfs_lon": 101.826656,
+    "osm_lat": 2.7541052,
+    "osm_lon": 101.8266056,
+    "difference_meters": 44.4,
+    "osm_name": "Labu"
+  },
+  {
+    "stop_id": "53800",
+    "name": "BATU TIGA",
+    "gtfs_lat": 3.076091,
+    "gtfs_lon": 101.559811,
+    "osm_lat": 3.0759817,
+    "osm_lon": 101.5596963,
+    "difference_meters": 17.6,
+    "osm_name": "Batu Tiga"
+  },
+  {
+    "stop_id": "54200",
+    "name": "SHAH ALAM",
+    "gtfs_lat": 3.056388,
+    "gtfs_lon": 101.525302,
+    "osm_lat": 3.0564068,
+    "osm_lon": 101.525125,
+    "difference_meters": 19.8,
+    "osm_name": "Shah Alam"
+  },
+  {
+    "stop_id": "54400",
+    "name": "PADANG JAWA",
+    "gtfs_lat": 3.052532,
+    "gtfs_lon": 101.492742,
+    "osm_lat": 3.0523639,
+    "osm_lon": 101.4926741,
+    "difference_meters": 20.2,
+    "osm_name": "Padang Jawa"
+  },
+  {
+    "stop_id": "55100",
+    "name": "JALAN KASTAM",
+    "gtfs_lat": 3.013128,
+    "gtfs_lon": 101.402599,
+    "osm_lat": 3.0135698,
+    "osm_lon": 101.4030733,
+    "difference_meters": 72.0,
+    "osm_name": "Jalan Kastam"
+  },
+  {
+    "stop_id": "55200",
+    "name": "PEL. KLANG (S)",
+    "gtfs_lat": 2.999323,
+    "gtfs_lon": 101.39179,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "53100",
+    "name": "Jalan Templer",
+    "gtfs_lat": 3.084013,
+    "gtfs_lon": 101.656402,
+    "osm_lat": 3.0834859,
+    "osm_lon": 101.6565162,
+    "difference_meters": 60.0,
+    "osm_name": "Jalan Templer"
+  },
+  {
+    "stop_id": "53400",
+    "name": "Kg.Datuk Harun",
+    "gtfs_lat": 3.084828,
+    "gtfs_lon": 101.632339,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "53500",
+    "name": "Seri Setia",
+    "gtfs_lat": 3.083373,
+    "gtfs_lon": 101.61143,
+    "osm_lat": 3.0844964,
+    "osm_lon": 101.6219071,
+    "difference_meters": 1170.0,
+    "osm_name": "Seri Setia"
+  },
+  {
+    "stop_id": "54800",
+    "name": "Teluk Pulai",
+    "gtfs_lat": 3.04089,
+    "gtfs_lon": 101.432153,
+    "osm_lat": 3.0403095,
+    "osm_lon": 101.4316361,
+    "difference_meters": 86.4,
+    "osm_name": "Teluk Pulai"
+  },
+  {
+    "stop_id": "54900",
+    "name": "Teluk Gadong",
+    "gtfs_lat": 3.033932,
+    "gtfs_lon": 101.424947,
+    "osm_lat": 3.0340384,
+    "osm_lon": 101.4249672,
+    "difference_meters": 12.0,
+    "osm_name": "Teluk Gadong"
+  },
+  {
+    "stop_id": "55000",
+    "name": "Kampung Raja Uda",
+    "gtfs_lat": 3.020253,
+    "gtfs_lon": 101.41023,
+    "osm_lat": 3.020603,
+    "osm_lon": 101.4105229,
+    "difference_meters": 50.7,
+    "osm_name": "Kampung Raja Uda"
+  },
+  {
+    "stop_id": "16300",
+    "name": "RASA",
+    "gtfs_lat": 3.500586,
+    "gtfs_lon": 101.634113,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "16500",
+    "name": "BATANG KALI",
+    "gtfs_lat": 3.46838,
+    "gtfs_lon": 101.637759,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "19205",
+    "name": "Midvalley",
+    "gtfs_lat": 3.119211,
+    "gtfs_lon": 101.678865,
+    "osm_lat": 3.1186708,
+    "osm_lon": 101.6789512,
+    "difference_meters": 60.8,
+    "osm_name": "Midvalley"
+  },
+  {
+    "stop_id": "23100",
+    "name": "SUNGAI GADUT",
+    "gtfs_lat": 2.660898,
+    "gtfs_lon": 101.996158,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "18400",
+    "name": "Kepong Sentral",
+    "gtfs_lat": 3.208653,
+    "gtfs_lon": 101.62849,
+    "osm_lat": 3.2086481,
+    "osm_lon": 101.6285075,
+    "difference_meters": 2.0,
+    "osm_name": "Kepong Sentral"
+  },
+  {
+    "stop_id": "22900",
+    "name": "Senawang",
+    "gtfs_lat": 2.690138,
+    "gtfs_lon": 101.972336,
+    "osm_lat": null,
+    "osm_lon": null,
+    "difference_meters": null
+  },
+  {
+    "stop_id": "52700",
+    "name": "ABDULLAH HUKUM",
+    "gtfs_lat": 3.11869,
+    "gtfs_lon": 101.67293,
+    "osm_lat": 3.118737,
+    "osm_lon": 101.6729585,
+    "difference_meters": 6.1,
+    "osm_name": "Abdullah Hukum"
+  },
+  {
+    "stop_id": "50300",
+    "name": "Batu Kentonmen",
+    "gtfs_lat": 3.198485,
+    "gtfs_lon": 101.681138,
+    "osm_lat": 3.1982566,
+    "osm_lon": 101.6812612,
+    "difference_meters": 28.8,
+    "osm_name": "Batu Kentonmen"
+  },
+  {
+    "stop_id": "20402",
+    "name": "KAJANG 2",
+    "gtfs_lat": 2.96264,
+    "gtfs_lon": 101.79207,
+    "osm_lat": 2.9625649,
+    "osm_lon": 101.7919457,
+    "difference_meters": 16.1,
+    "osm_name": "Kajang 2"
+  }
+]

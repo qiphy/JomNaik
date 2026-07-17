@@ -1,0 +1,29 @@
+{
+  "version": 8,
+  "name": "JomNaik Offline Style",
+    "sources": {
+        "protomaps_offline": {
+        "type": "vector",
+        "url": "pmtiles://asset://flutter_assets/assets/tiles/klang_valley.pmtiles"
+        }
+    },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f0f0f0"
+      }
+    },
+    {
+      "id": "roads",
+      "type": "line",
+      "source": "protomaps_offline",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": "#000000",
+        "line-width": 1
+      }
+    }
+  ]
+}

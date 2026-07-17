@@ -1,0 +1,4 @@
+fastapi
+gtfs-realtime-bindings
+requests
+uvicorn
