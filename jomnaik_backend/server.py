@@ -20,12 +20,17 @@ from google.transit import gtfs_realtime_pb2
 
 app = FastAPI(title="JomNaik Routing Middleware")
 
-# Hardcoded OTP v2 GraphQL Endpoint
-OTP_URL = "http://localhost:8080/otp/routers/default/index/graphql"
+# OTP is addressed by its Docker service name in production. Keep localhost
+# as the local-development fallback, but allow deployment configuration to
+# override it through the OTP_URL environment variable.
+OTP_URL = os.getenv(
+    "OTP_URL", "http://localhost:8080/otp/routers/default/index/graphql"
+)
 DATA_DIRECTORY = Path(__file__).parent
 DEPARTURE_SCHEDULES_FILE = DATA_DIRECTORY / "departure_schedules.json"
 COVERED_WALKWAYS_FILE = DATA_DIRECTORY / "covered_walkways.geojsonseq"
 STATION_COORDINATE_AUDIT_FILE = DATA_DIRECTORY / "station_coordinate_audit.json"
+KTM_FARE_FILE = DATA_DIRECTORY / "ktm_komuter_fares.json"
 REALTIME_FEEDS = {
     "gtfs-bus.zip": "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-kl",
     "gtfs-mrtfeeder.zip": "https://api.data.gov.my/gtfs-realtime/vehicle-position/prasarana?category=rapid-bus-mrtfeeder",
@@ -59,10 +64,14 @@ SUPABASE_STATION_COORDINATES_TABLE = _configured_value(
     "SUPABASE_STATION_COORDINATES_TABLE"
 ) or "station_coordinates"
 SUPABASE_PRESENCE_TABLE = _configured_value("SUPABASE_PRESENCE_TABLE") or "anonymous_station_presence"
+SUPABASE_INCIDENT_REPORTS_TABLE = _configured_value(
+    "SUPABASE_INCIDENT_REPORTS_TABLE"
+) or "anonymous_incident_reports"
 _traffic_cache = {}
 TRAFFIC_CACHE_SECONDS = 60
 MAX_TOMTOM_LOOKUPS_PER_REQUEST = 6
 STATION_PRESENCE_WINDOW_MINUTES = 15
+INCIDENT_REPORT_WINDOW_MINUTES = 20
 EHAILING_RATE_PER_KM = 1.50
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
@@ -519,6 +528,9 @@ def _street_walk_to_station(from_lat, from_lon, station, departure_date, departu
         date: $date
         time: $time
         numItineraries: 1
+        # Minimize total journey time during OTP search. Covered/open walking
+        # preference is applied after planning, so SAFE can otherwise select
+        # a short interchange walk with a long backtracking transit wait.
         optimize: SAFE
         transportModes: [{ mode: WALK }]
       ) {
@@ -583,6 +595,85 @@ def _route_label(route):
 
 
 @lru_cache(maxsize=1)
+def _ktm_fare_table():
+    try:
+        with KTM_FARE_FILE.open(encoding="utf-8") as source:
+            return json.load(source)
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _fare_station_key(value):
+    return re.sub(r"[^A-Z0-9]", "", unicodedata.normalize("NFKD", (value or "").upper()))
+
+
+def _ktm_fare_station_index():
+    table = _ktm_fare_table()
+    names = table.get("stationNames") or []
+    aliases = {
+        "PELABUHANKLANG": "PELKLANG",
+        "JALANKASTAM": "JLNKASTAM",
+        "KAMPUNGRAJAUDA": "KGRAJAUDA",
+        "KAMPUNGDATOHARUN": "KGDATOHARUN",
+        "JALANTEMPLER": "JLNTEMPLER",
+        "KAMPUNGBATU": "KGBATU",
+        "BATUKENTONMEN": "BATUKENTONMEN",
+        "TANJUNGMALIM": "TANJUNGMALIM",
+    }
+    index = {_fare_station_key(name): number for number, name in enumerate(names)}
+    index.update({alias: index[target] for alias, target in aliases.items() if target in index})
+    return index
+
+
+def _ktm_fare_station_number(name):
+    key = _fare_station_key(name)
+    index = _ktm_fare_station_index()
+    if key in index:
+        return index[key]
+    # OTP may return a longer station name than the fare table. Accept a
+    # unique containment match, but never guess between two stations.
+    matches = {number for station_key, number in index.items() if station_key in key or key in station_key}
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
+def _is_ktm_leg(leg):
+    route = leg.get("route") or {}
+    text = f"{route.get('shortName') or ''} {route.get('longName') or ''}".upper()
+    return "KTM" in text or "KOMUTER" in text
+
+
+def _ktm_fare_for_itinerary(itinerary):
+    """Return the fare-table cash amount for all KTM Komuter legs."""
+    table = _ktm_fare_table()
+    matrix = table.get("matrix") or []
+    total = 0.0
+    matched = False
+    for leg in itinerary.get("legs") or []:
+        if not _is_ktm_leg(leg):
+            continue
+        origin = _ktm_fare_station_number((leg.get("from") or {}).get("name"))
+        destination = _ktm_fare_station_number((leg.get("to") or {}).get("name"))
+        if origin is None or destination is None:
+            continue
+        try:
+            fare = matrix[origin][destination]
+        except (IndexError, TypeError):
+            fare = None
+        if fare is not None:
+            total += float(fare)
+            matched = True
+    if not matched:
+        return None
+    return {
+        "amount": round(total, 2),
+        "currency": "MYR",
+        "paymentType": "cash",
+        "effectiveDate": table.get("effectiveDate"),
+        "label": "KTM Komuter cash fare",
+    }
+
+
+@lru_cache(maxsize=1)
 def _trip_stop_sequences():
     sequences = {}
     for filename in REALTIME_FEEDS:
@@ -601,10 +692,17 @@ def _trip_stop_sequences():
                 trip = trips.get(row["trip_id"], {})
                 route = routes.get(trip.get("route_id", ""), {})
                 route_name = route.get("route_short_name") or route.get("route_long_name") or trip.get("route_id", "Transit")
+                is_brt = (
+                    str(route_name).strip().casefold() == "brt"
+                    or str(route.get("route_type", "")).strip().upper() == "BRT"
+                )
                 sequences.setdefault(row["trip_id"], {
                     "route": route_name,
                     "direction": _terminal_station(trip),
-                    "is_bus": filename != "gtfs-rail.zip",
+                    # BRT is distributed in the Rapid Rail GTFS bundle, but
+                    # its vehicles are buses and must use GTFS-Realtime bus
+                    # matching/traffic handling.
+                    "is_bus": filename != "gtfs-rail.zip" or is_brt,
                     "stops": [],
                 })["stops"].append((row["stop_id"], float(stop["stop_lat"]), float(stop["stop_lon"])))
     return sequences
@@ -686,9 +784,11 @@ def _apply_station_transfer_times(itineraries):
 
 @lru_cache(maxsize=1)
 def _bus_stop_locations():
-    """Return the static locations of all Rapid Bus and MRT feeder stops."""
+    """Return Rapid Bus, MRT feeder, and BRT stop locations."""
     locations = []
-    for filename in ("gtfs-bus.zip", "gtfs-mrtfeeder.zip"):
+    # The BRT stops are packaged in gtfs-rail.zip, although BRT vehicles are
+    # represented by the RapidKL rail GTFS-Realtime feed.
+    for filename in ("gtfs-bus.zip", "gtfs-mrtfeeder.zip", "gtfs-rail.zip"):
         with zipfile.ZipFile(DATA_DIRECTORY / filename, "r") as archive:
             with archive.open("stops.txt") as file:
                 for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")):
@@ -775,6 +875,51 @@ def _station_activity_level(reports):
     return "low"
 
 
+def _recent_incident_reports(stop_ids):
+    """Return recent, anonymous incident types grouped by affected stop."""
+    if not stop_ids or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        return {}
+    cutoff = (datetime.now().astimezone() - timedelta(
+        minutes=INCIDENT_REPORT_WINDOW_MINUTES
+    )).isoformat()
+    try:
+        response = requests.get(
+            f"{SUPABASE_URL}/rest/v1/{SUPABASE_INCIDENT_REPORTS_TABLE}",
+            params={
+                "select": "station_id,report_type",
+                "station_id": f"in.({','.join(stop_ids)})",
+                "reported_at": f"gte.{cutoff}",
+            },
+            headers={
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            },
+            timeout=4,
+        )
+        response.raise_for_status()
+        reports = defaultdict(list)
+        for row in response.json():
+            stop_id = row.get("station_id")
+            report_type = row.get("report_type")
+            if stop_id in stop_ids and report_type:
+                reports[stop_id].append(str(report_type))
+        return dict(reports)
+    except (requests.exceptions.RequestException, TypeError, ValueError):
+        return {}
+
+
+def _incident_penalty(report_types):
+    """Bias alternatives away from recent, independently reported incidents."""
+    severity = {
+        "stuckTrain": 120,
+        "missingBus": 100,
+        "disruption": 120,
+        "safety": 70,
+        "crowding": 30,
+    }
+    return sum(severity.get(report_type, 0) for report_type in report_types)
+
+
 def _attach_congestion_metadata(itineraries):
     """Attach Supabase-only station/stop congestion signals to each route."""
     station_matches = {}
@@ -786,7 +931,9 @@ def _attach_congestion_metadata(itineraries):
                 station = _station_id_at_place(place)
                 if station is not None:
                     station_matches[station["id"]] = station
-    presence = _recent_station_presence(list(station_matches))
+    stop_ids = list(station_matches)
+    presence = _recent_station_presence(stop_ids)
+    incidents = _recent_incident_reports(stop_ids)
 
     for itinerary in itineraries:
         stations = []
@@ -820,6 +967,42 @@ def _attach_congestion_metadata(itineraries):
             "stationActivity": stations,
             "stationSource": "anonymous_presence" if presence else "unavailable",
         }
+        affected_incidents = []
+        incident_penalty = 0
+        for station in stations:
+            report_types = incidents.get(station["id"], [])
+            if not report_types:
+                continue
+            affected_incidents.append({
+                "stationId": station["id"],
+                "stationName": station["name"],
+                "reportTypes": report_types,
+            })
+            incident_penalty += _incident_penalty(report_types)
+        itinerary["incidentScore"] = incident_penalty
+        itinerary["incidents"] = {
+            "reports": affected_incidents,
+            "source": "anonymous_incident_reports" if incidents else "unavailable",
+        }
+        # Attach the relevant station reports to each transit leg so the app
+        # can surface a warning directly beside that service.
+        for leg in itinerary.get("legs") or []:
+            if (leg.get("mode") or "").upper() in {"WALK", "HAIL", ""}:
+                continue
+            leg_incidents = []
+            seen = set()
+            for place in (leg.get("from") or {}, leg.get("to") or {}):
+                station = _station_id_at_place(place)
+                if station is None or station["id"] in seen:
+                    continue
+                seen.add(station["id"])
+                for report_type in incidents.get(station["id"], []):
+                    leg_incidents.append({
+                        "stationName": station["name"],
+                        "type": report_type,
+                    })
+            if leg_incidents:
+                leg["incidentReports"] = leg_incidents
 
 
 def _live_vehicle_estimates(stop_id):
@@ -881,7 +1064,9 @@ def _live_vehicle_estimates(stop_id):
 
 def _live_bus_estimate_for_leg(leg, route_name):
     """Match an OTP bus boarding point to its next GTFS-Realtime vehicle."""
-    if (leg.get("mode") or "").upper() != "BUS" or not route_name:
+    mode = (leg.get("mode") or "").upper()
+    is_brt = str(route_name).strip().casefold() in {"brt", "b1000"}
+    if (mode != "BUS" and not (is_brt and mode in {"TRAM", "RAIL"})) or not route_name:
         return None
     origin = leg.get("from") or {}
     try:
@@ -903,9 +1088,14 @@ def _live_bus_estimate_for_leg(leg, route_name):
         return None
 
     normalized_route = str(route_name).strip().casefold()
+    route_aliases = {normalized_route}
+    if normalized_route in {"brt", "b1000"}:
+        # RapidKL publishes the BRT service as BRT in the rail GTFS but as
+        # bus code B1000 in the rapid-bus-kl GTFS-Realtime feed.
+        route_aliases.update({"brt", "b1000"})
     for estimate in _live_vehicle_estimates(stop_id):
         if (estimate["is_bus"] and
-                str(estimate["route"]).strip().casefold() == normalized_route):
+                str(estimate["route"]).strip().casefold() in route_aliases):
             return estimate
     return None
 
@@ -1036,6 +1226,22 @@ def get_next_departures(stop_id: str, limit: int | None = None):
         unique_departures = unique_departures[:limit]
     return {"departures": unique_departures}
 
+
+@app.get("/api/transit/stops/{stop_id}/incidents")
+def get_stop_incidents(stop_id: str):
+    """Expose current anonymous incident summaries without exposing reporters."""
+    reports = _recent_incident_reports([stop_id]).get(stop_id, [])
+    counts = defaultdict(int)
+    for report_type in reports:
+        counts[report_type] += 1
+    return {
+        "incidents": [
+            {"type": report_type, "count": count}
+            for report_type, count in sorted(counts.items())
+        ],
+        "windowMinutes": INCIDENT_REPORT_WINDOW_MINUTES,
+    }
+
 @app.get("/api/transit/stops")
 def get_gtfs_stops():
     # Array mapping our split official feed zip layers
@@ -1139,7 +1345,10 @@ def get_transit_route(request: RouteRequest):
         # Allow a short window for the next service. This lets the route join
         # a nearby station rather than abandoning it for a long walk just
         # because a frequent BRT or rail vehicle is a few minutes away.
-        searchWindow: 1800
+        # Transfers may need to wait beyond one scheduled headway, especially
+        # for feeder services. Search two hours so OTP can find the next valid
+        # connecting trip instead of abandoning the transit option.
+        searchWindow: 7200
         # Prefer pedestrian paths and lower-risk walking links for transfers
         # before using ordinary roadside segments. OTP falls back to roads only
         # where the OSM pedestrian network does not provide a connection.
@@ -1276,6 +1485,10 @@ __BUS_MODE__
         # amount of uncovered walking.
         itineraries.sort(
             key=lambda itinerary: (
+                # Recent incident reports take priority over comfort ranking:
+                # the router should offer a viable alternative to a reported
+                # disruption even if its walking connection is less sheltered.
+                itinerary.get("incidentScore", 0),
                 itinerary["uncoveredWalkSeconds"],
                 itinerary.get("congestionScore", 0),
                 -int(itinerary["isRecommended"]),
@@ -1354,6 +1567,9 @@ __BUS_MODE__
         # Normalize OTP's nested GraphQL fields into the exact shape consumed by
         # Flutter's transit-leg list. Intermediate stops retain OTP's order.
         for itinerary in itineraries:
+            ktm_fare = _ktm_fare_for_itinerary(itinerary)
+            if ktm_fare is not None:
+                itinerary["fare"] = ktm_fare
             itinerary["routeCategory"] = _itinerary_category(itinerary)
             for leg in itinerary.get("legs") or []:
                 route_info = leg.get("route") or {}
