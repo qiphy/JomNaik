@@ -1,6 +1,6 @@
 """Add frequency rules derived from the MRT feeder's scheduled departures.
 
-The feed contains scheduled trips but no frequencies.txt. OTP therefore treats
+The feed contains scheduled trips but no frequencies.txt. MOTIS therefore treats
 every feeder trip as an isolated departure, which creates large transfer waits.
 This script derives a conservative headway per route/service/direction from the
 first-stop departures and attaches one frequency pattern to a representative

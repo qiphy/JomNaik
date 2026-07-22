@@ -1,28 +1,33 @@
 version: '3.8'
 
 services:
-  # --- Layer 1: OpenTripPlanner Java Graph Engine ---
-  otp-engine:
-    image: eclipse-temurin:17-jre-jammy
-    container_name: otp_routing_container
-    volumes:
-      - ./otp:/app/otp
-    working_dir: /app/otp
-    # Allocate 3GB of heap limit strictly to the Java instance
-    command: java -Xmx3G -jar otp-2.4.0-shaded.jar --load .
+  # --- Layer 1: MOTIS multimodal routing engine ---
+  motis-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.motis
+    container_name: motis_routing_container
     expose:
       - "8080"
     restart: always
 
   # --- Layer 2: Your FastAPI Intelligence Interceptor ---
   fastapi-backend:
-    build: .
+    build:
+      context: .
+      # The repository currently uses this capitalized filename; specify it
+      # explicitly so builds also work on Linux hosts.
+      dockerfile: DockerFile
     container_name: fastapi_middleware_container
     ports:
       - "80:8000" # Map production web traffic port 80 to FastAPI
+    # Keep Supabase's service-role key on the server. It is needed only for
+    # aggregated incident reads and must never be compiled into Flutter.
+    env_file:
+      - .env
     environment:
-      - OTP_URL=http://otp-engine:8080/otp/routers/default/index/graphql
+      - MOTIS_URL=http://motis-engine:8080
       - REDIS_URL=redis://redis-cache:6375/0
     depends_on:
-      - otp-engine
+      - motis-engine
     restart: always

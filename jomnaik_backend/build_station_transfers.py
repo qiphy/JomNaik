@@ -21,6 +21,15 @@ def normalized_station_name(name):
     return re.sub(r"[^A-Z0-9]", "", value)
 
 
+def interchange_station_name(name):
+    """Normalize known split-name interchanges across Rapid Rail lines."""
+    value = normalized_station_name(name)
+    aliases = {
+        "GLENMARIE2": "GLENMARIE",
+    }
+    return aliases.get(value, value)
+
+
 def distance_meters(first, second):
     lat_1, lon_1, lat_2, lon_2 = map(radians, (*first, *second))
     delta_lat, delta_lon = lat_2 - lat_1, lon_2 - lon_1
@@ -102,11 +111,11 @@ def add_pair(first, second, first_rows, second_rows, minimum_seconds=None):
 
 # Same-name stations in the Rapid Rail/BRT feed, with different route IDs.
 for index, first in enumerate(rail_stops):
-    first_name = normalized_station_name(first["stop_name"])
+    first_name = interchange_station_name(first["stop_name"])
     for second in rail_stops[index + 1:]:
         if first.get("route_id") == second.get("route_id"):
             continue
-        if first_name != normalized_station_name(second["stop_name"]):
+        if first_name != interchange_station_name(second["stop_name"]):
             continue
         if distance_meters(
             (float(first["stop_lat"]), float(first["stop_lon"])),
@@ -115,7 +124,7 @@ for index, first in enumerate(rail_stops):
             add_pair(first, second, rail_rows, rail_rows)
 
 # KL Sentral and Muzium Negara are linked by a signed pedestrian connection.
-# Keep the real concourse-walk allowance so OTP uses it only when it saves
+# Keep the real concourse-walk allowance so the routing engine uses it only when it saves
 # time compared with staying on or changing at another interchange.
 stops_by_id = {stop["stop_id"]: stop for stop in rail_stops}
 for from_stop_id, to_stop_id, seconds in (

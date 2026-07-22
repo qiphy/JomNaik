@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Create an OTP-specific OSM extract that favours sheltered pedestrian ways.
+"""Create a routing-engine OSM extract that favours sheltered pedestrian ways.
 
-OTP 2.4 has no configuration hook for assigning a walk-safety cost to
+The routing engine has no configuration hook for assigning a walk-safety cost to
 ``covered=*``.  Its built-in mapper does, however, assign a low walk-safety
-factor to ``highway=path``.  This script makes a *derived* PBF for OTP only:
+factor to ``highway=path``. This script makes a derived PBF for routing:
 covered/indoor pedestrian ways are represented as paths, while the source PBF
 and the original highway value remain untouched.
 """
@@ -84,7 +84,7 @@ def sheltered_way_change(source_pbf: Path, change_file: Path) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path, help="Original OSM PBF")
-    parser.add_argument("output", type=Path, help="Derived PBF for OTP")
+    parser.add_argument("output", type=Path, help="Derived PBF for routing")
     parser.add_argument(
         "--change-file",
         type=Path,

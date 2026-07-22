@@ -45,7 +45,7 @@ writer.writerows(frequency_rows)
 files["frequencies.txt"] = output.getvalue().encode()
 
 # BRT USJ 7 and LRT USJ 7 are a single interchange in practice but are
-# separate GTFS stops. An explicit short transfer prevents OTP from walking
+# separate GTFS stops. An explicit short transfer prevents the router from walking
 # from South Quay to the LRT instead of boarding the BRT for that connection.
 transfer_output = io.StringIO(newline="")
 transfer_writer = csv.DictWriter(

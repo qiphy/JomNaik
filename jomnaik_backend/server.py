@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import os
+import logging
 import zipfile
 import io
 import csv
+import copy
 from collections import defaultdict
 from html.parser import HTMLParser
 from datetime import datetime, timedelta
@@ -15,17 +18,21 @@ import unicodedata
 from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 from time import monotonic, sleep
+from zoneinfo import ZoneInfo
 
 from google.transit import gtfs_realtime_pb2
+from motis_adapter import plan as motis_plan, walk as motis_walk
 
 app = FastAPI(title="JomNaik Routing Middleware")
+logger = logging.getLogger("jomnaik")
+APP_TIMEZONE = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kuala_Lumpur"))
 
-# OTP is addressed by its Docker service name in production. Keep localhost
-# as the local-development fallback, but allow deployment configuration to
-# override it through the OTP_URL environment variable.
-OTP_URL = os.getenv(
-    "OTP_URL", "http://localhost:8080/otp/routers/default/index/graphql"
-)
+
+def _local_now():
+    """Return Malaysia local time regardless of the container's OS timezone."""
+    return datetime.now(APP_TIMEZONE)
+
+
 DATA_DIRECTORY = Path(__file__).parent
 DEPARTURE_SCHEDULES_FILE = DATA_DIRECTORY / "departure_schedules.json"
 COVERED_WALKWAYS_FILE = DATA_DIRECTORY / "covered_walkways.geojsonseq"
@@ -54,11 +61,26 @@ def _configured_value(name):
     return ""
 
 
+CORS_ALLOW_ORIGINS = [
+    origin.strip()
+    for origin in (
+        _configured_value("CORS_ALLOW_ORIGINS")
+        or "http://localhost:3000,http://127.0.0.1:3000,http://152.42.181.141,https://152.42.181.141"
+    ).split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 TOMTOM_API_KEY = _configured_value("TOMTOM_API_KEY")
 TOMTOM_FLOW_URL = "https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json"
 SUPABASE_URL = _configured_value("SUPABASE_URL").rstrip("/")
-# Keep this key on the server only. It is used to read anonymous, aggregated
-# station-presence samples; the Flutter app continues to use its public key.
 SUPABASE_SERVICE_ROLE_KEY = _configured_value("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_STATION_COORDINATES_TABLE = _configured_value(
     "SUPABASE_STATION_COORDINATES_TABLE"
@@ -73,14 +95,22 @@ MAX_TOMTOM_LOOKUPS_PER_REQUEST = 6
 STATION_PRESENCE_WINDOW_MINUTES = 15
 INCIDENT_REPORT_WINDOW_MINUTES = 20
 EHAILING_RATE_PER_KM = 1.50
+MAX_PUBLIC_TRANSPORT_TRANSFER_WAIT_SECONDS = 10 * 60
+LAST_MILE_EHAILING_THRESHOLD_METERS = 1000
+STATION_AREA_RADIUS_METERS = 110
+STATION_WALKWAY_RADIUS_METERS = 180
 NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
 RAPIDKL_FARE_TABLE_URL = "https://mrt.com.my/fare/fares-master10.htm"
+OSRM_DRIVING_URL = os.getenv(
+    "OSRM_DRIVING_URL", "https://router.project-osrm.org/route/v1/driving"
+)
 _geocode_cache = {}
 _last_geocode_request_at = 0.0
 _covered_walkway_grid = None
 _COVERED_WALKWAY_GRID_SIZE = 0.001
 _SHELTER_MATCH_DISTANCE_METERS = 18
+
 
 class RouteRequest(BaseModel):
     from_lat: float
@@ -89,12 +119,11 @@ class RouteRequest(BaseModel):
     to_lon: float
     departure_date: str | None = None
     departure_time: str | None = None
-    prefer_brt: bool = False
 
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "routingEngine": "motis"}
 
 
 @app.get("/api/places/search")
@@ -107,7 +136,6 @@ def search_places(query: str = Query(min_length=2, max_length=120)):
     if cached is not None:
         return {"results": cached}
 
-    # Respect the public Nominatim service's one-request-per-second policy.
     wait_seconds = 1 - (monotonic() - _last_geocode_request_at)
     if wait_seconds > 0:
         sleep(wait_seconds)
@@ -191,7 +219,6 @@ def reverse_place(latitude: float = Query(ge=-90, le=90), longitude: float = Que
         _geocode_cache[cache_key] = result
         return result
     except (requests.exceptions.RequestException, TypeError, ValueError):
-        # A dropped pin remains useful even if a nearby OSM address is absent.
         return {
             "name": "Dropped pin",
             "address": f"{latitude:.5f}, {longitude:.5f}",
@@ -202,8 +229,11 @@ def reverse_place(latitude: float = Query(ge=-90, le=90), longitude: float = Que
 
 @lru_cache(maxsize=1)
 def _scheduled_departures_by_stop():
-    with DEPARTURE_SCHEDULES_FILE.open(encoding="utf-8") as file:
-        return json.load(file)
+    try:
+        with DEPARTURE_SCHEDULES_FILE.open(encoding="utf-8") as file:
+            return json.load(file)
+    except (OSError, ValueError):
+        return {}
 
 
 @lru_cache(maxsize=1)
@@ -211,36 +241,154 @@ def _scheduled_rail_terminals():
     """Map scheduled rail/BRT calls to their GTFS destination terminals."""
     terminals = {}
     for filename in ("gtfs-rail.zip", "gtfs-ktmb.zip"):
-        with zipfile.ZipFile(DATA_DIRECTORY / filename, "r") as archive:
-            def read_csv(name):
-                with archive.open(name) as file:
-                    return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
+        zip_path = DATA_DIRECTORY / filename
+        if not zip_path.exists():
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                def read_csv(name):
+                    with archive.open(name) as file:
+                        return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
 
-            routes = {row["route_id"]: row for row in read_csv("routes.txt")}
-            trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
-            service_days = {
-                row["service_id"]: "".join(
-                    row[day] for day in (
-                        "monday", "tuesday", "wednesday", "thursday",
-                        "friday", "saturday", "sunday",
-                    )
-                )
-                for row in read_csv("calendar.txt")
-            }
+                routes = {row["route_id"]: row for row in read_csv("routes.txt")}
+                trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
+                
+                if "calendar.txt" in archive.namelist():
+                    service_days = {
+                        row["service_id"]: "".join(
+                            row[day] for day in (
+                                "monday", "tuesday", "wednesday", "thursday",
+                                "friday", "saturday", "sunday",
+                            )
+                        )
+                        for row in read_csv("calendar.txt")
+                    }
+                else:
+                    service_days = {}
 
-            for stop_time in read_csv("stop_times.txt"):
-                trip = trips.get(stop_time["trip_id"])
-                if trip is None:
-                    continue
-                route = routes.get(trip["route_id"], {})
-                route_name = route.get("route_short_name") or route.get("route_long_name")
-                active_days = service_days.get(trip.get("service_id"))
-                terminal = _terminal_station(trip)
-                if not route_name or not active_days or not terminal:
-                    continue
-                key = (stop_time["stop_id"], route_name, stop_time["arrival_time"], active_days)
-                terminals.setdefault(key, set()).add(terminal)
+                for stop_time in read_csv("stop_times.txt"):
+                    trip = trips.get(stop_time["trip_id"])
+                    if trip is None:
+                        continue
+                    route = routes.get(trip["route_id"], {})
+                    route_name = route.get("route_short_name") or route.get("route_long_name")
+                    active_days = service_days.get(trip.get("service_id"))
+                    terminal = _terminal_station(trip)
+                    if not route_name or not active_days or not terminal:
+                        continue
+                    key = (stop_time["stop_id"], route_name, stop_time["arrival_time"], active_days)
+                    terminals.setdefault(key, set()).add(terminal)
+        except (zipfile.BadZipFile, KeyError, OSError):
+            continue
     return terminals
+
+
+@lru_cache(maxsize=1)
+def _frequency_calls_by_stop():
+    """Index GTFS frequency-based rail/BRT calls with their terminal signs."""
+    calls = defaultdict(list)
+    for filename in ("gtfs-rail.zip", "gtfs-ktmb.zip"):
+        zip_path = DATA_DIRECTORY / filename
+        if not zip_path.exists():
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                if "frequencies.txt" not in archive.namelist():
+                    continue
+
+                def read_csv(name):
+                    with archive.open(name) as file:
+                        return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
+
+                routes = {row["route_id"]: row for row in read_csv("routes.txt")}
+                trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
+                
+                if "calendar.txt" in archive.namelist():
+                    service_days = {
+                        row["service_id"]: "".join(
+                            row[day] for day in (
+                                "monday", "tuesday", "wednesday", "thursday",
+                                "friday", "saturday", "sunday",
+                            )
+                        )
+                        for row in read_csv("calendar.txt")
+                    }
+                else:
+                    service_days = {}
+
+                stop_times = defaultdict(list)
+                for row in read_csv("stop_times.txt"):
+                    stop_times[row["trip_id"]].append(row)
+
+                for frequency in read_csv("frequencies.txt"):
+                    trip = trips.get(frequency.get("trip_id"))
+                    if trip is None:
+                        continue
+                    route = routes.get(trip.get("route_id"), {})
+                    route_name = route.get("route_short_name") or route.get("route_long_name")
+                    terminal = _terminal_station(trip)
+                    active_days = service_days.get(trip.get("service_id"))
+                    if not route_name or not terminal or not active_days:
+                        continue
+                    try:
+                        start_seconds = _clock_seconds(frequency["start_time"])
+                        end_seconds = _clock_seconds(frequency["end_time"])
+                        headway_seconds = int(frequency["headway_secs"])
+                        trip_calls = sorted(
+                            stop_times[trip["trip_id"]],
+                            key=lambda row: int(row.get("stop_sequence") or 0),
+                        )
+                        first_departure = _clock_seconds(trip_calls[0]["departure_time"])
+                    except (KeyError, TypeError, ValueError, IndexError):
+                        continue
+                    for stop_time in trip_calls:
+                        try:
+                            offset_seconds = _clock_seconds(stop_time["departure_time"]) - first_departure
+                        except (KeyError, TypeError, ValueError):
+                            continue
+                        calls[stop_time["stop_id"]].append({
+                            "route": route_name,
+                            "terminal": terminal,
+                            "activeDays": active_days,
+                            "first": start_seconds + offset_seconds,
+                            "last": end_seconds + offset_seconds,
+                            "headway": headway_seconds,
+                        })
+        except (zipfile.BadZipFile, KeyError, OSError):
+            continue
+    return dict(calls)
+
+
+def _clock_seconds(value):
+    hours, minutes, seconds = (int(part) for part in value.split(":"))
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _frequency_departures(stop_id, now):
+    """Return the next calls from GTFS frequencies, retaining terminals."""
+    departures = []
+    for call in _frequency_calls_by_stop().get(stop_id, []):
+        for day_offset in range(2):
+            day = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=day_offset)
+            if day.weekday() >= len(call["activeDays"]) or call["activeDays"][day.weekday()] != "1":
+                continue
+            first = day + timedelta(seconds=call["first"])
+            last = day + timedelta(seconds=call["last"])
+            if last < now:
+                continue
+            elapsed = max(0, int((now - first).total_seconds()))
+            step = max(0, (elapsed + call["headway"] - 1) // call["headway"])
+            departure = first + timedelta(seconds=step * call["headway"])
+            if departure <= last:
+                departures.append({
+                    "route": call["route"],
+                    "direction": call["terminal"],
+                    "is_bus": False,
+                    "time": departure.strftime("%I:%M %p").lstrip("0"),
+                    "timestamp": int(departure.timestamp() * 1000),
+                    "is_estimated": False,
+                })
+    return departures
 
 
 def _next_departure_datetime(time_value, active_days, now):
@@ -252,10 +400,22 @@ def _next_departure_datetime(time_value, active_days, now):
     for day_offset in range(8):
         scheduled = now.replace(hour=0, minute=0, second=0, microsecond=0)
         scheduled += timedelta(days=day_offset, hours=hours, minutes=minutes, seconds=seconds)
-        if active_days[scheduled.weekday()] != "1" or scheduled < now:
+        if scheduled.weekday() >= len(active_days) or active_days[scheduled.weekday()] != "1" or scheduled < now:
             continue
         return scheduled
     return None
+
+
+def _next_scheduled_departure(stop_id, route, after):
+    """Return the first GTFS departure at a stop on or after ``after``."""
+    departures = []
+    for scheduled_route, scheduled_time, active_days in _scheduled_departures_by_stop().get(stop_id, []):
+        if str(scheduled_route).casefold() != str(route).casefold():
+            continue
+        departure = _next_departure_datetime(scheduled_time, active_days, after)
+        if departure is not None:
+            departures.append(departure)
+    return min(departures, default=None)
 
 
 def _distance_meters(from_lat, from_lon, to_lat, to_lon):
@@ -269,17 +429,23 @@ def _distance_meters(from_lat, from_lon, to_lat, to_lon):
 def _rail_and_brt_stations():
     """Return the rail-feed stops, including the Sunway BRT stations."""
     osm_coordinates = _osm_station_coordinates()
-    with zipfile.ZipFile(DATA_DIRECTORY / "gtfs-rail.zip", "r") as archive:
-        with archive.open("stops.txt") as file:
-            return [
-                {
-                    "id": row["stop_id"],
-                    "name": row["stop_name"],
-                    "lat": osm_coordinates.get(row["stop_id"], (float(row["stop_lat"]), float(row["stop_lon"])))[0],
-                    "lon": osm_coordinates.get(row["stop_id"], (float(row["stop_lat"]), float(row["stop_lon"])))[1],
-                }
-                for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig"))
-            ]
+    zip_path = DATA_DIRECTORY / "gtfs-rail.zip"
+    if not zip_path.exists():
+        return []
+    try:
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            with archive.open("stops.txt") as file:
+                return [
+                    {
+                        "id": row["stop_id"],
+                        "name": row["stop_name"],
+                        "lat": osm_coordinates.get(row["stop_id"], (float(row["stop_lat"]), float(row["stop_lon"])))[0],
+                        "lon": osm_coordinates.get(row["stop_id"], (float(row["stop_lat"]), float(row["stop_lon"])))[1],
+                    }
+                    for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig"))
+                ]
+    except (zipfile.BadZipFile, OSError, KeyError):
+        return []
 
 
 @lru_cache(maxsize=1)
@@ -292,8 +458,6 @@ def _osm_station_coordinates():
                 for item in json.load(source)
                 if item.get("osm_lat") is not None and item.get("osm_lon") is not None
             }
-            # Deployment data can correct a coordinate without requiring a
-            # mobile release or an OTP-data repository update.
             coordinates.update(_supabase_station_coordinates())
             return coordinates
     except (OSError, ValueError, TypeError):
@@ -302,12 +466,6 @@ def _osm_station_coordinates():
 
 @lru_cache(maxsize=1)
 def _supabase_station_coordinates():
-    """Load optional station overrides maintained in Supabase.
-
-    The table shape is ``stop_id text primary key, lat double precision,
-    lon double precision``. Missing credentials or table leave routing on the
-    checked-in OSM audit, so route search remains available offline.
-    """
     if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return {}
     try:
@@ -328,17 +486,71 @@ def _supabase_station_coordinates():
             and row.get("lat") is not None
             and row.get("lon") is not None
         }
-    except (requests.exceptions.RequestException, TypeError, ValueError):
+    except (requests.exceptions.RequestException, TypeError, ValueError) as error:
+        logger.warning("Could not read station coordinates from Supabase: %s", error)
         return {}
 
 
 def _nearest_rail_or_brt_station(latitude, longitude):
+    stations = _rail_and_brt_stations()
+    if not stations:
+        return None
     return min(
-        _rail_and_brt_stations(),
+        stations,
         key=lambda station: _distance_meters(
             latitude, longitude, station["lat"], station["lon"]
         ),
     )
+
+
+@lru_cache(maxsize=1)
+def _all_transit_stations():
+    """Return one nearest-access target for every GTFS stop/station."""
+    osm_coordinates = _osm_station_coordinates()
+    stations = {}
+    for stop_id, name, latitude, longitude in _transit_stop_locations():
+        latitude, longitude = osm_coordinates.get(stop_id, (latitude, longitude))
+        stations.setdefault(stop_id, {
+            "id": stop_id,
+            "name": name,
+            "lat": latitude,
+            "lon": longitude,
+        })
+    return tuple(stations.values())
+
+
+def _nearest_transit_station(latitude, longitude):
+    stations = _all_transit_stations()
+    if not stations:
+        raise HTTPException(status_code=500, detail="Transit station database unavailable.")
+    return min(
+        stations,
+        key=lambda station: _distance_meters(
+            latitude, longitude, station["lat"], station["lon"]
+        ),
+    )
+
+
+@lru_cache(maxsize=1)
+def _motis_stop_id_index():
+    """Map each local GTFS stop ID to MOTIS's dataset-qualified ID."""
+    index = {}
+    for filename in ("gtfs-bus.zip", "gtfs-mrtfeeder.zip", "gtfs-rail.zip", "gtfs-ktmb.zip"):
+        dataset = Path(filename).stem
+        try:
+            with zipfile.ZipFile(DATA_DIRECTORY / filename) as archive:
+                with archive.open("stops.txt") as file:
+                    for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")):
+                        stop_id = row.get("stop_id")
+                        if stop_id:
+                            index.setdefault(stop_id, f"{dataset}_{stop_id}")
+        except (OSError, KeyError, zipfile.BadZipFile):
+            continue
+    return index
+
+
+def _motis_stop_ref(stop_id):
+    return _motis_stop_id_index().get(stop_id)
 
 
 def _covered_walkway_segments():
@@ -411,6 +623,54 @@ def _point_to_segment_meters(latitude, longitude, segment):
     return sqrt(nearest_x * nearest_x + nearest_y * nearest_y)
 
 
+def _nearest_point_on_segment(latitude, longitude, segment):
+    """Return the closest latitude/longitude point on an OSM walkway segment."""
+    lon_1, lat_1, lon_2, lat_2 = segment
+    longitude_scale = 111320 * cos(radians(latitude))
+    x_1, y_1 = (lon_1 - longitude) * longitude_scale, (lat_1 - latitude) * 110540
+    x_2, y_2 = (lon_2 - longitude) * longitude_scale, (lat_2 - latitude) * 110540
+    length_squared = x_2 * x_2 + y_2 * y_2
+    if length_squared == 0:
+        return lat_1, lon_1
+    position = max(0, min(1, -(x_1 * (x_2 - x_1) + y_1 * (y_2 - y_1)) / length_squared))
+    return lat_1 + position * (lat_2 - lat_1), lon_1 + position * (lon_2 - lon_1)
+
+
+def _station_access_target(from_lat, from_lon, station):
+    station_distance = _distance_meters(
+        from_lat, from_lon, station["lat"], station["lon"]
+    )
+    if station_distance <= STATION_AREA_RADIUS_METERS:
+        return dict(station), True
+
+    grid = _covered_walkway_segments()
+    lon_cell = int(station["lon"] // _COVERED_WALKWAY_GRID_SIZE)
+    lat_cell = int(station["lat"] // _COVERED_WALKWAY_GRID_SIZE)
+    candidates = [
+        segment
+        for x in range(lon_cell - 2, lon_cell + 3)
+        for y in range(lat_cell - 2, lat_cell + 3)
+        for segment in grid.get((x, y), [])
+        if _point_to_segment_meters(station["lat"], station["lon"], segment)
+        <= STATION_WALKWAY_RADIUS_METERS
+    ]
+    if not candidates:
+        return dict(station), False
+
+    access_lat, access_lon = min(
+        (_nearest_point_on_segment(from_lat, from_lon, segment) for segment in candidates),
+        key=lambda point: _distance_meters(from_lat, from_lon, point[0], point[1]),
+    )
+    if _distance_meters(from_lat, from_lon, access_lat, access_lon) >= station_distance:
+        return dict(station), False
+    return {
+        **station,
+        "lat": access_lat,
+        "lon": access_lon,
+        "name": f"{station['name']} station area",
+    }, False
+
+
 def _sheltered_walk_fraction(leg):
     geometry = leg.get("legGeometry") or {}
     encoded = geometry.get("points")
@@ -446,11 +706,9 @@ def _sheltered_walk_fraction(leg):
 
 
 def _traffic_delay_factor(latitude, longitude):
-    """Return a bounded road-congestion multiplier, or None when unavailable."""
     if not TOMTOM_API_KEY:
         return None
 
-    # Rounding groups nearby vehicles onto one cached road-flow lookup.
     cache_key = (round(latitude, 3), round(longitude, 3))
     cached = _traffic_cache.get(cache_key)
     if cached and monotonic() - cached["loaded_at"] < TRAFFIC_CACHE_SECONDS:
@@ -468,7 +726,6 @@ def _traffic_delay_factor(latitude, longitude):
         free_flow = flow.get("freeFlowTravelTime")
         if not current or not free_flow:
             return None
-        # Keep a bad or unusual road segment from producing implausible ETAs.
         factor = max(0.7, min(float(current) / float(free_flow), 2.0))
         _traffic_cache[cache_key] = {"loaded_at": monotonic(), "factor": factor}
         return factor
@@ -476,19 +733,55 @@ def _traffic_delay_factor(latitude, longitude):
         return None
 
 
+def _road_route(from_lat, from_lon, to_lat, to_lon):
+    # MOTIS is the only routing engine. OSRM supplies a road geometry for the
+    # separate e-hailing estimate because MOTIS transit planning is not used
+    # for that leg.
+    try:
+        response = requests.get(
+            f"{OSRM_DRIVING_URL}/{from_lon},{from_lat};{to_lon},{to_lat}",
+            params={"overview": "full", "geometries": "geojson", "steps": "false"},
+            timeout=8,
+        )
+        response.raise_for_status()
+        route = (response.json().get("routes") or [None])[0]
+        coordinates = ((route or {}).get("geometry") or {}).get("coordinates") or []
+        if route and len(coordinates) >= 2:
+            return {
+                "duration": max(60, int(float(route.get("duration") or 0))),
+                "coordinates": coordinates,
+            }
+    except (requests.exceptions.RequestException, TypeError, ValueError, IndexError):
+        pass
+    return None
+
+
 def _fallback_itinerary(request, mode, message):
-    """Create an honest, direct fallback when OTP has no route at all."""
     direct_distance = _distance_meters(
         request.from_lat, request.from_lon, request.to_lat, request.to_lon
     )
     speed_mps = 1.35 if mode == "WALK" else 7.8
-    duration = max(60, int(direct_distance / speed_mps))
+    road_route = None
+    if mode == "HAIL":
+        road_route = _road_route(
+            request.from_lat, request.from_lon, request.to_lat, request.to_lon
+        )
+        if road_route is not None:
+            direct_distance = sum(
+                _distance_meters(a[1], a[0], b[1], b[0])
+                for a, b in zip(road_route["coordinates"], road_route["coordinates"][1:])
+            )
+            duration = road_route["duration"]
+        else:
+            duration = max(60, int(direct_distance / speed_mps))
+    else:
+        duration = max(60, int(direct_distance / speed_mps))
     traffic_factor = None
     if mode == "HAIL":
         traffic_factor = _traffic_delay_factor(request.from_lat, request.from_lon)
         if traffic_factor is not None:
             duration = max(60, int(duration * traffic_factor))
-    start = datetime.now().astimezone()
+    start = _local_now()
     end = start + timedelta(seconds=duration)
     itinerary = {
         "duration": duration,
@@ -504,6 +797,13 @@ def _fallback_itinerary(request, mode, message):
             "intermediateStops": [],
         }],
     }
+    if road_route is not None:
+        itinerary["legs"][0]["legGeometry"] = {
+            "coordinates": road_route["coordinates"]
+        }
+        itinerary["legs"][0]["usesRoadRoute"] = True
+    else:
+        itinerary["legs"][0]["roadRoutingUnavailable"] = True
     if mode == "HAIL":
         itinerary["fare"] = {
             "amount": round((direct_distance / 1000) * EHAILING_RATE_PER_KM, 2),
@@ -513,72 +813,207 @@ def _fallback_itinerary(request, mode, message):
     return itinerary
 
 
-def _street_walk_to_station(from_lat, from_lon, station, departure_date, departure_time):
-    """Ask OTP for a network walk, rather than drawing a direct access line.
+def _is_public_transport_leg(leg):
+    return (leg.get("mode") or "").upper() in {"BUS", "RAIL", "SUBWAY", "TRAM"}
 
-    OTP snaps the supplied point (including a point inside a building) to the
-    closest walkable street/path vertex and returns the walkable geometry to
-    the station.  ``None`` means the street graph could not reach the station.
-    """
-    query = """
-    query StreetWalk($fromLat: Float!, $fromLon: Float!, $toLat: Float!, $toLon: Float!, $date: String!, $time: String!) {
-      plan(
-        from: { lat: $fromLat, lon: $fromLon }
-        to: { lat: $toLat, lon: $toLon }
-        date: $date
-        time: $time
-        numItineraries: 1
-        # Minimize total journey time during OTP search. Covered/open walking
-        # preference is applied after planning, so SAFE can otherwise select
-        # a short interchange walk with a long backtracking transit wait.
-        optimize: SAFE
-        transportModes: [{ mode: WALK }]
-      ) {
-        itineraries {
-          duration
-          legs {
-            mode
-            startTime
-            endTime
-            headsign
-            from { name lat lon }
-            to { name lat lon }
-            route { shortName longName }
-            legGeometry { points }
-            intermediateStops { name lat lon }
-          }
-        }
-      }
-    }
-    """
+
+def _last_mile_ehailing_leg(from_place, to_lat, to_lon, start_time_ms):
     try:
-        response = requests.post(
-            OTP_URL,
-            json={
-                "query": query,
-                "variables": {
-                    "fromLat": from_lat, "fromLon": from_lon,
-                    "toLat": station["lat"], "toLon": station["lon"],
-                    "date": departure_date, "time": departure_time,
-                },
-            },
-            headers={"Content-Type": "application/json"},
+        from_lat, from_lon = float(from_place["lat"]), float(from_place["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    distance = _distance_meters(from_lat, from_lon, to_lat, to_lon)
+    duration = max(60, int(distance / 7.8))
+    road_route = _road_route(from_lat, from_lon, to_lat, to_lon)
+    if road_route is not None:
+        distance = sum(
+            _distance_meters(a[1], a[0], b[1], b[0])
+            for a, b in zip(road_route["coordinates"], road_route["coordinates"][1:])
+        )
+        duration = road_route["duration"]
+    traffic_factor = _traffic_delay_factor(from_lat, from_lon)
+    if traffic_factor is not None:
+        duration = max(60, int(duration * traffic_factor))
+    leg = {
+        "mode": "HAIL",
+        "startTime": str(start_time_ms),
+        "endTime": str(start_time_ms + duration * 1000),
+        "headsign": "Your destination",
+        "from": dict(from_place),
+        "to": {"name": "Your destination", "lat": to_lat, "lon": to_lon},
+        "routeShortName": "Last-mile e-hailing",
+        "intermediateStops": [],
+        "estimatedFare": round((distance / 1000) * EHAILING_RATE_PER_KM, 2),
+        "lastMileEhailing": True,
+    }
+    if road_route is not None:
+        leg["legGeometry"] = {"coordinates": road_route["coordinates"]}
+        leg["usesRoadRoute"] = True
+    else:
+        leg["roadRoutingUnavailable"] = True
+    return leg
+
+
+def _replace_long_last_mile_walks(itineraries, request):
+    for itinerary in itineraries:
+        legs = itinerary.get("legs") or []
+        transit_indices = [index for index, leg in enumerate(legs) if _is_public_transport_leg(leg)]
+        if not transit_indices or any((leg.get("mode") or "").upper() == "HAIL" for leg in legs):
+            continue
+        last_transit_index = transit_indices[-1]
+        tail = legs[last_transit_index + 1:]
+        if not tail or any((leg.get("mode") or "").upper() != "WALK" for leg in tail):
+            continue
+        try:
+            walk_seconds = sum(
+                max(0, (int(leg["endTime"]) - int(leg["startTime"])) // 1000)
+                for leg in tail
+            )
+            transit_end = int(legs[last_transit_index]["endTime"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if walk_seconds * 1.35 <= LAST_MILE_EHAILING_THRESHOLD_METERS:
+            continue
+        hail_leg = _last_mile_ehailing_leg(
+            legs[last_transit_index].get("to") or {},
+            request.to_lat,
+            request.to_lon,
+            transit_end,
+        )
+        if hail_leg is None:
+            continue
+        itinerary["legs"] = legs[:last_transit_index + 1] + [hail_leg]
+        itinerary["duration"] = max(
+            0, itinerary.get("duration", 0) - walk_seconds
+        ) + (int(hail_leg["endTime"]) - transit_end) // 1000
+        itinerary["lastMileEhailing"] = True
+
+
+def _discard_walks_over_one_kilometre(itineraries):
+    valid = []
+    for itinerary in itineraries:
+        too_long = False
+        for leg in itinerary.get("legs") or []:
+            if (leg.get("mode") or "").upper() != "WALK":
+                continue
+            try:
+                seconds = max(0, (int(leg["endTime"]) - int(leg["startTime"])) // 1000)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if seconds * 1.35 > 1000:
+                too_long = True
+                break
+        if not too_long:
+            valid.append(itinerary)
+    return valid
+
+
+def _street_walk_to_station(from_lat, from_lon, station, departure_date, departure_time):
+    try:
+        departure_datetime = datetime.strptime(
+            f"{departure_date} {departure_time}", "%Y-%m-%d %H:%M:%S"
+        ).replace(tzinfo=APP_TIMEZONE)
+        itinerary = motis_walk(
+            from_lat=from_lat,
+            from_lon=from_lon,
+            to_lat=station["lat"],
+            to_lon=station["lon"],
+            departure_time=departure_datetime,
             timeout=20,
         )
-        response.raise_for_status()
-        itinerary = ((response.json().get("data", {}).get("plan") or {}).get("itineraries") or [None])[0]
         if not itinerary or not itinerary.get("legs"):
             return None
         for leg in itinerary["legs"]:
             leg["isNearestStationAccess"] = True
             leg["usesStreetAccess"] = True
+        itinerary["legs"][-1]["to"] = {
+            "name": station["name"],
+            "lat": station["lat"],
+            "lon": station["lon"],
+        }
         return itinerary
     except (requests.exceptions.RequestException, IndexError, TypeError, ValueError):
         return None
 
 
+def _prepend_origin_access(itinerary, access_itinerary):
+    access_legs = copy.deepcopy(access_itinerary.get("legs") or [])
+    transit_legs = itinerary.get("legs") or []
+    if not access_legs or not transit_legs:
+        return itinerary
+    itinerary["legs"] = access_legs + transit_legs
+    try:
+        itinerary["duration"] = max(
+            0,
+            (int(transit_legs[-1]["endTime"]) - int(access_legs[0]["startTime"])) // 1000,
+        )
+    except (KeyError, TypeError, ValueError):
+        pass
+    itinerary["originStationAccess"] = True
+    return itinerary
+
+
+def _destination_access_leg(destination_station, to_lat, to_lon, access_itinerary):
+    source_legs = (access_itinerary or {}).get("legs") or []
+    if not source_legs:
+        return None
+    try:
+        duration = sum(
+            max(0, (int(leg["endTime"]) - int(leg["startTime"])) // 1000)
+            for leg in source_legs
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    coordinates = []
+    for leg in source_legs:
+        encoded = (leg.get("legGeometry") or {}).get("points")
+        if isinstance(encoded, str):
+            coordinates.extend(_decode_polyline(encoded))
+    geometry = None
+    if coordinates:
+        geometry = {
+            "coordinates": [[lon, lat] for lat, lon in reversed(coordinates)]
+        }
+    leg = {
+        "mode": "WALK",
+        "startTime": "0",
+        "endTime": str(duration * 1000),
+        "headsign": "",
+        "from": dict(destination_station),
+        "to": {"name": "Destination", "lat": to_lat, "lon": to_lon},
+        "routeShortName": None,
+        "intermediateStops": [],
+        "isDestinationAccess": True,
+        "usesStreetAccess": True,
+    }
+    if geometry:
+        leg["legGeometry"] = geometry
+    return leg
+
+
+def _append_destination_access(itinerary, access_leg):
+    if access_leg is None:
+        return itinerary
+    legs = itinerary.get("legs") or []
+    if not legs:
+        return itinerary
+    try:
+        start = int(legs[-1]["endTime"])
+        duration = int(access_leg["endTime"]) // 1000
+    except (KeyError, TypeError, ValueError):
+        return itinerary
+    access_leg = copy.deepcopy(access_leg)
+    access_leg["startTime"] = str(start)
+    access_leg["endTime"] = str(start + duration * 1000)
+    itinerary["legs"] = legs + [access_leg]
+    itinerary["duration"] = max(
+        0, (int(access_leg["endTime"]) - int(legs[0]["startTime"])) // 1000
+    )
+    itinerary["destinationStationAccess"] = True
+    return itinerary
+
+
 def _terminal_station(trip):
-    """Return the destination terminal from a GTFS trip headsign."""
     headsign = (trip.get("trip_headsign") or "").strip()
     if " to " in headsign.lower():
         return headsign.rsplit(" to ", 1)[-1].strip()
@@ -586,7 +1021,6 @@ def _terminal_station(trip):
 
 
 def _route_label(route):
-    """Return the passenger-facing route number for an OTP route object."""
     for field in ("shortName", "longName"):
         value = (route.get(field) or "").strip()
         if value:
@@ -630,8 +1064,6 @@ def _ktm_fare_station_number(name):
     index = _ktm_fare_station_index()
     if key in index:
         return index[key]
-    # OTP may return a longer station name than the fare table. Accept a
-    # unique containment match, but never guess between two stations.
     matches = {number for station_key, number in index.items() if station_key in key or key in station_key}
     return next(iter(matches)) if len(matches) == 1 else None
 
@@ -643,7 +1075,6 @@ def _is_ktm_leg(leg):
 
 
 def _ktm_fare_for_itinerary(itinerary):
-    """Return the fare-table cash amount for all KTM Komuter legs."""
     table = _ktm_fare_table()
     matrix = table.get("matrix") or []
     total = 0.0
@@ -673,77 +1104,97 @@ def _ktm_fare_for_itinerary(itinerary):
     }
 
 
+def _payment_guidance_for_leg(leg):
+    mode = (leg.get("mode") or "").upper()
+    if mode == "HAIL":
+        return "Pay in your selected e-hailing app"
+    if _is_ktm_leg(leg):
+        return "KTM Komuter: cash ticket or cashless payment"
+    if mode == "BUS":
+        return "Rapid KL bus: Touch 'n Go or MyRapid concession card"
+    if mode in {"RAIL", "SUBWAY", "TRAM"}:
+        return "Rapid KL rail/BRT: Touch 'n Go or a single-journey token"
+    return None
+
+
 @lru_cache(maxsize=1)
 def _trip_stop_sequences():
     sequences = {}
     for filename in REALTIME_FEEDS:
-        with zipfile.ZipFile(DATA_DIRECTORY / filename, "r") as archive:
-            def read_csv(name):
-                with archive.open(name) as file:
-                    return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
+        zip_path = DATA_DIRECTORY / filename
+        if not zip_path.exists():
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                def read_csv(name):
+                    with archive.open(name) as file:
+                        return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
 
-            stops = {row["stop_id"]: row for row in read_csv("stops.txt")}
-            routes = {row["route_id"]: row for row in read_csv("routes.txt")}
-            trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
-            for row in sorted(read_csv("stop_times.txt"), key=lambda item: (item["trip_id"], int(item["stop_sequence"]))):
-                stop = stops.get(row["stop_id"])
-                if stop is None:
-                    continue
-                trip = trips.get(row["trip_id"], {})
-                route = routes.get(trip.get("route_id", ""), {})
-                route_name = route.get("route_short_name") or route.get("route_long_name") or trip.get("route_id", "Transit")
-                is_brt = (
-                    str(route_name).strip().casefold() == "brt"
-                    or str(route.get("route_type", "")).strip().upper() == "BRT"
-                )
-                sequences.setdefault(row["trip_id"], {
-                    "route": route_name,
-                    "direction": _terminal_station(trip),
-                    # BRT is distributed in the Rapid Rail GTFS bundle, but
-                    # its vehicles are buses and must use GTFS-Realtime bus
-                    # matching/traffic handling.
-                    "is_bus": filename != "gtfs-rail.zip" or is_brt,
-                    "stops": [],
-                })["stops"].append((row["stop_id"], float(stop["stop_lat"]), float(stop["stop_lon"])))
+                stops = {row["stop_id"]: row for row in read_csv("stops.txt")}
+                routes = {row["route_id"]: row for row in read_csv("routes.txt")}
+                trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
+                for row in sorted(read_csv("stop_times.txt"), key=lambda item: (item["trip_id"], int(item["stop_sequence"]))):
+                    stop = stops.get(row["stop_id"])
+                    if stop is None:
+                        continue
+                    trip = trips.get(row["trip_id"], {})
+                    route = routes.get(trip.get("route_id", ""), {})
+                    route_name = route.get("route_short_name") or route.get("route_long_name") or trip.get("route_id", "Transit")
+                    is_brt = (
+                        str(route_name).strip().casefold() == "brt"
+                        or str(route.get("route_type", "")).strip().upper() == "BRT"
+                    )
+                    sequences.setdefault(row["trip_id"], {
+                        "route": route_name,
+                        "direction": _terminal_station(trip),
+                        "is_bus": filename != "gtfs-rail.zip" or is_brt,
+                        "stops": [],
+                    })["stops"].append((row["stop_id"], float(stop["stop_lat"]), float(stop["stop_lon"])))
+        except (zipfile.BadZipFile, KeyError, OSError):
+            continue
     return sequences
 
 
 @lru_cache(maxsize=1)
 def _station_transfer_links():
-    """Load explicit same-station transfer links from the Rapid Rail GTFS."""
-    with zipfile.ZipFile(DATA_DIRECTORY / "gtfs-rail.zip") as archive:
-        with archive.open("stops.txt") as file:
-            stops = {
-                row["stop_id"]: row
-                for row in csv.DictReader(
-                    io.TextIOWrapper(file, encoding="utf-8-sig")
+    zip_path = DATA_DIRECTORY / "gtfs-rail.zip"
+    if not zip_path.exists():
+        return []
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            with archive.open("stops.txt") as file:
+                stops = {
+                    row["stop_id"]: row
+                    for row in csv.DictReader(
+                        io.TextIOWrapper(file, encoding="utf-8-sig")
+                    )
+                }
+            if "transfers.txt" not in archive.namelist():
+                return []
+            with archive.open("transfers.txt") as file:
+                transfers = list(
+                    csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig"))
                 )
-            }
-        if "transfers.txt" not in archive.namelist():
-            return []
-        with archive.open("transfers.txt") as file:
-            transfers = list(
-                csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig"))
-            )
-    links = []
-    for transfer in transfers:
-        origin = stops.get(transfer.get("from_stop_id"))
-        destination = stops.get(transfer.get("to_stop_id"))
-        try:
-            links.append((
-                float(origin["stop_lat"]),
-                float(origin["stop_lon"]),
-                float(destination["stop_lat"]),
-                float(destination["stop_lon"]),
-                int(transfer.get("min_transfer_time") or 60),
-            ))
-        except (KeyError, TypeError, ValueError):
-            continue
-    return links
+        links = []
+        for transfer in transfers:
+            origin = stops.get(transfer.get("from_stop_id"))
+            destination = stops.get(transfer.get("to_stop_id"))
+            try:
+                links.append((
+                    float(origin["stop_lat"]),
+                    float(origin["stop_lon"]),
+                    float(destination["stop_lat"]),
+                    float(destination["stop_lon"]),
+                    int(transfer.get("min_transfer_time") or 60),
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return links
+    except (zipfile.BadZipFile, OSError, KeyError):
+        return []
 
 
 def _apply_station_transfer_times(itineraries):
-    """Replace OTP street detours with audited interchange transfer times."""
     for itinerary in itineraries:
         legs = itinerary.get("legs") or []
         for index, leg in enumerate(legs):
@@ -782,53 +1233,95 @@ def _apply_station_transfer_times(itineraries):
                 break
 
 
+def _attach_transfer_waits(itineraries):
+    for itinerary in itineraries:
+        previous_transit_end = None
+        waits = []
+        for leg in itinerary.get("legs") or []:
+            if not _is_public_transport_leg(leg):
+                continue
+            try:
+                start = int(leg["startTime"])
+                end = int(leg["endTime"])
+            except (KeyError, TypeError, ValueError):
+                previous_transit_end = None
+                continue
+            if previous_transit_end is not None:
+                gap_seconds = max(0, (start - previous_transit_end) // 1000)
+                waits.append(gap_seconds)
+            previous_transit_end = end
+
+        max_wait = max(waits, default=0)
+        itinerary["transferWaitSeconds"] = max_wait
+        itinerary["hasExcessiveTransferWait"] = (
+            max_wait > MAX_PUBLIC_TRANSPORT_TRANSFER_WAIT_SECONDS
+        )
+
+
+def _discard_excessive_transfer_waits(itineraries):
+    return [
+        itinerary for itinerary in itineraries
+        if not itinerary.get("hasExcessiveTransferWait", False)
+    ]
+
+
 @lru_cache(maxsize=1)
 def _bus_stop_locations():
-    """Return Rapid Bus, MRT feeder, and BRT stop locations."""
     locations = []
-    # The BRT stops are packaged in gtfs-rail.zip, although BRT vehicles are
-    # represented by the RapidKL rail GTFS-Realtime feed.
     for filename in ("gtfs-bus.zip", "gtfs-mrtfeeder.zip", "gtfs-rail.zip"):
-        with zipfile.ZipFile(DATA_DIRECTORY / filename, "r") as archive:
-            with archive.open("stops.txt") as file:
-                for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")):
-                    try:
-                        locations.append((
-                            row["stop_id"],
-                            float(row["stop_lat"]),
-                            float(row["stop_lon"]),
-                        ))
-                    except (KeyError, TypeError, ValueError):
-                        continue
+        zip_path = DATA_DIRECTORY / filename
+        if not zip_path.exists():
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                with archive.open("stops.txt") as file:
+                    for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")):
+                        try:
+                            locations.append((
+                                row["stop_id"],
+                                float(row["stop_lat"]),
+                                float(row["stop_lon"]),
+                            ))
+                        except (KeyError, TypeError, ValueError):
+                            continue
+        except (zipfile.BadZipFile, OSError, KeyError):
+            continue
     return locations
 
 
 @lru_cache(maxsize=1)
 def _transit_stop_locations():
-    """Return every GTFS stop for matching itinerary places to station IDs."""
     locations = []
     for filename in ("gtfs-bus.zip", "gtfs-mrtfeeder.zip", "gtfs-rail.zip", "gtfs-ktmb.zip"):
-        with zipfile.ZipFile(DATA_DIRECTORY / filename, "r") as archive:
-            with archive.open("stops.txt") as file:
-                for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")):
-                    try:
-                        locations.append((
-                            row["stop_id"], row.get("stop_name", "Station"),
-                            float(row["stop_lat"]), float(row["stop_lon"]),
-                        ))
-                    except (KeyError, TypeError, ValueError):
-                        continue
+        zip_path = DATA_DIRECTORY / filename
+        if not zip_path.exists():
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                with archive.open("stops.txt") as file:
+                    for row in csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")):
+                        try:
+                            locations.append((
+                                row["stop_id"], row.get("stop_name", "Station"),
+                                float(row["stop_lat"]), float(row["stop_lon"]),
+                            ))
+                        except (KeyError, TypeError, ValueError):
+                            continue
+        except (zipfile.BadZipFile, OSError, KeyError):
+            continue
     return locations
 
 
 def _station_id_at_place(place):
-    """Resolve OTP's street-linked stop location to a GTFS station ID."""
     try:
         latitude, longitude = float(place["lat"]), float(place["lon"])
     except (KeyError, TypeError, ValueError):
         return None
+    locations = _transit_stop_locations()
+    if not locations:
+        return None
     stop_id, name, stop_lat, stop_lon = min(
-        _transit_stop_locations(),
+        locations,
         key=lambda stop: _distance_meters(latitude, longitude, stop[2], stop[3]),
     )
     if _distance_meters(latitude, longitude, stop_lat, stop_lon) > 180:
@@ -837,10 +1330,14 @@ def _station_id_at_place(place):
 
 
 def _recent_station_presence(stop_ids):
-    """Return anonymous recent-presence counts, never individual locations."""
     if not stop_ids or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return {}
-    cutoff = (datetime.now().astimezone() - timedelta(
+    
+    sanitized_ids = [re.sub(r"[^A-Za-z0-9_\-]", "", str(s_id)) for s_id in stop_ids if s_id]
+    if not sanitized_ids:
+        return {}
+
+    cutoff = (_local_now() - timedelta(
         minutes=STATION_PRESENCE_WINDOW_MINUTES
     )).isoformat()
     try:
@@ -848,7 +1345,7 @@ def _recent_station_presence(stop_ids):
             f"{SUPABASE_URL}/rest/v1/{SUPABASE_PRESENCE_TABLE}",
             params={
                 "select": "station_id",
-                "station_id": f"in.({','.join(stop_ids)})",
+                "station_id": f"in.({','.join(sanitized_ids)})",
                 "observed_at": f"gte.{cutoff}",
             },
             headers={
@@ -860,10 +1357,11 @@ def _recent_station_presence(stop_ids):
         response.raise_for_status()
         counts = defaultdict(int)
         for row in response.json():
-            if row.get("station_id") in stop_ids:
+            if row.get("station_id") in sanitized_ids:
                 counts[row["station_id"]] += 1
         return dict(counts)
-    except (requests.exceptions.RequestException, TypeError, ValueError):
+    except (requests.exceptions.RequestException, TypeError, ValueError) as error:
+        logger.warning("Could not read presence from Supabase: %s", error)
         return {}
 
 
@@ -876,18 +1374,22 @@ def _station_activity_level(reports):
 
 
 def _recent_incident_reports(stop_ids):
-    """Return recent, anonymous incident types grouped by affected stop."""
     if not stop_ids or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
         return {}
-    cutoff = (datetime.now().astimezone() - timedelta(
+
+    sanitized_ids = [re.sub(r"[^A-Za-z0-9_\-]", "", str(s_id)) for s_id in stop_ids if s_id]
+    if not sanitized_ids:
+        return {}
+
+    cutoff = (_local_now() - timedelta(
         minutes=INCIDENT_REPORT_WINDOW_MINUTES
     )).isoformat()
     try:
         response = requests.get(
             f"{SUPABASE_URL}/rest/v1/{SUPABASE_INCIDENT_REPORTS_TABLE}",
             params={
-                "select": "station_id,report_type",
-                "station_id": f"in.({','.join(stop_ids)})",
+                "select": "station_id,report_type,target_type,service_route",
+                "station_id": f"in.({','.join(sanitized_ids)})",
                 "reported_at": f"gte.{cutoff}",
             },
             headers={
@@ -901,27 +1403,39 @@ def _recent_incident_reports(stop_ids):
         for row in response.json():
             stop_id = row.get("station_id")
             report_type = row.get("report_type")
-            if stop_id in stop_ids and report_type:
-                reports[stop_id].append(str(report_type))
+            if stop_id in sanitized_ids and report_type:
+                reports[stop_id].append({
+                    "type": str(report_type),
+                    "targetType": str(row.get("target_type") or "station"),
+                    "route": str(row.get("service_route") or "").strip() or None,
+                })
         return dict(reports)
     except (requests.exceptions.RequestException, TypeError, ValueError):
         return {}
 
 
 def _incident_penalty(report_types):
-    """Bias alternatives away from recent, independently reported incidents."""
     severity = {
         "stuckTrain": 120,
         "missingBus": 100,
         "disruption": 120,
         "safety": 70,
         "crowding": 30,
+        "busNotArrived": 100,
+        "busCrowding": 30,
+        "busBreakdown": 120,
+        "busSafety": 70,
     }
-    return sum(severity.get(report_type, 0) for report_type in report_types)
+    return sum(
+        severity.get(
+            report_type.get("type") if isinstance(report_type, dict) else report_type,
+            0,
+        )
+        for report_type in report_types
+    )
 
 
 def _attach_congestion_metadata(itineraries):
-    """Attach Supabase-only station/stop congestion signals to each route."""
     station_matches = {}
     for itinerary in itineraries:
         for leg in itinerary.get("legs") or []:
@@ -959,9 +1473,6 @@ def _attach_congestion_metadata(itineraries):
             ({"low": 0, "moderate": 1, "high": 2}[station["level"]] for station in stations),
             default=0,
         )
-        # Congestion ranking deliberately uses only anonymous Supabase reports
-        # for the stops/stations on this itinerary. TomTom remains an ETA
-        # input for vehicles, never a passenger-congestion classification.
         itinerary["congestionScore"] = station_penalty * 20
         itinerary["congestion"] = {
             "stationActivity": stations,
@@ -976,7 +1487,7 @@ def _attach_congestion_metadata(itineraries):
             affected_incidents.append({
                 "stationId": station["id"],
                 "stationName": station["name"],
-                "reportTypes": report_types,
+                "reportTypes": [report["type"] for report in report_types],
             })
             incident_penalty += _incident_penalty(report_types)
         itinerary["incidentScore"] = incident_penalty
@@ -984,8 +1495,6 @@ def _attach_congestion_metadata(itineraries):
             "reports": affected_incidents,
             "source": "anonymous_incident_reports" if incidents else "unavailable",
         }
-        # Attach the relevant station reports to each transit leg so the app
-        # can surface a warning directly beside that service.
         for leg in itinerary.get("legs") or []:
             if (leg.get("mode") or "").upper() in {"WALK", "HAIL", ""}:
                 continue
@@ -996,10 +1505,15 @@ def _attach_congestion_metadata(itineraries):
                 if station is None or station["id"] in seen:
                     continue
                 seen.add(station["id"])
-                for report_type in incidents.get(station["id"], []):
+                for report in incidents.get(station["id"], []):
+                    route = report.get("route")
+                    leg_route = _route_label(leg.get("route") or {}) or ""
+                    if route and route.casefold() != leg_route.casefold():
+                        continue
                     leg_incidents.append({
                         "stationName": station["name"],
-                        "type": report_type,
+                        "type": report["type"],
+                        "route": route,
                     })
             if leg_incidents:
                 leg["incidentReports"] = leg_incidents
@@ -1025,7 +1539,10 @@ def _live_vehicle_estimates(stop_id):
 
     estimates = []
     traffic_lookups_remaining = MAX_TOMTOM_LOOKUPS_PER_REQUEST
+    now = _local_now()
     for feed_name, vehicle in _realtime_cache["vehicles"]:
+        if vehicle.timestamp and abs(now.timestamp() - vehicle.timestamp) > 120:
+            continue
         trip_id = vehicle.trip.trip_id
         sequence = _trip_stop_sequences().get(trip_id)
         if sequence is None or not vehicle.HasField("position"):
@@ -1040,16 +1557,27 @@ def _live_vehicle_estimates(stop_id):
         for index in range(nearest_index, target_index):
             distance += _distance_meters(stops[index][1], stops[index][2], stops[index + 1][1], stops[index + 1][2])
         has_reported_speed = vehicle.position.speed > 1
-        speed = vehicle.position.speed if has_reported_speed else 6.0
+        if has_reported_speed:
+            speed = vehicle.position.speed
+            if feed_name != "gtfs-rail.zip":
+                speed /= 3.6
+            speed = max(2.0, min(speed, 16.7))
+        else:
+            speed = 6.0
         traffic_factor = None
-        # Road traffic applies only to bus and MRT feeder vehicles, never rail.
-        # Use it as a fallback when GTFS-RT has no measured vehicle speed.
-        if not has_reported_speed and feed_name != "gtfs-rail.zip" and traffic_lookups_remaining:
+        if feed_name != "gtfs-rail.zip" and traffic_lookups_remaining:
             traffic_factor = _traffic_delay_factor(vehicle.position.latitude, vehicle.position.longitude)
             traffic_lookups_remaining -= 1
-        eta_seconds = int((distance / speed) * (traffic_factor or 1.0))
+        traffic_multiplier = 1.0
+        if traffic_factor is not None:
+            traffic_multiplier = (
+                1.0 + (traffic_factor - 1.0) * 0.35
+                if has_reported_speed
+                else traffic_factor
+            )
+        eta_seconds = int((distance / speed) * traffic_multiplier)
         if eta_seconds <= 7200:
-            estimated_time = datetime.now().astimezone() + timedelta(seconds=eta_seconds)
+            estimated_time = now + timedelta(seconds=eta_seconds)
             estimates.append({
                 "route": sequence["route"],
                 "direction": sequence["direction"],
@@ -1063,7 +1591,6 @@ def _live_vehicle_estimates(stop_id):
 
 
 def _live_bus_estimate_for_leg(leg, route_name):
-    """Match an OTP bus boarding point to its next GTFS-Realtime vehicle."""
     mode = (leg.get("mode") or "").upper()
     is_brt = str(route_name).strip().casefold() in {"brt", "b1000"}
     if (mode != "BUS" and not (is_brt and mode in {"TRAM", "RAIL"})) or not route_name:
@@ -1082,16 +1609,12 @@ def _live_bus_estimate_for_leg(leg, route_name):
         locations,
         key=lambda stop: _distance_meters(latitude, longitude, stop[1], stop[2]),
     )
-    # OTP's boarding place should resolve to a real bus stop, rather than a
-    # nearby street vertex or interchange entrance.
     if _distance_meters(latitude, longitude, stop_latitude, stop_longitude) > 150:
         return None
 
     normalized_route = str(route_name).strip().casefold()
     route_aliases = {normalized_route}
     if normalized_route in {"brt", "b1000"}:
-        # RapidKL publishes the BRT service as BRT in the rail GTFS but as
-        # bus code B1000 in the rapid-bus-kl GTFS-Realtime feed.
         route_aliases.update({"brt", "b1000"})
     for estimate in _live_vehicle_estimates(stop_id):
         if (estimate["is_bus"] and
@@ -1101,42 +1624,150 @@ def _live_bus_estimate_for_leg(leg, route_name):
 
 
 def _itinerary_category(itinerary):
-    """Classify a choice by its dominant public-transport mode."""
+    has_brt = any(
+        (_route_label(leg.get("route") or {}) or "").strip().upper() in {"BRT", "B1000"}
+        for leg in itinerary.get("legs") or []
+    )
+    if has_brt:
+        return "bus"
     modes = [
         (leg.get("mode") or "").upper()
         for leg in itinerary.get("legs") or []
     ]
-    if "HAIL" in modes:
-        return "ehailing"
     rail_legs = sum(mode in {"RAIL", "SUBWAY", "TRAM"} for mode in modes)
     bus_legs = modes.count("BUS")
     if rail_legs and rail_legs >= bus_legs:
         return "rail"
     if bus_legs:
         return "bus"
+    if "HAIL" in modes:
+        return "ehailing"
     return "walking"
 
 
-def _prefer_south_quay_brt_transfer(itineraries, origin_station):
-    """Use the BRT at South Quay for the co-located USJ 7 LRT interchange.
+@lru_cache(maxsize=1)
+def _brt_to_usj7_connections():
+    connections = {}
+    zip_path = DATA_DIRECTORY / "gtfs-rail.zip"
+    if not zip_path.exists():
+        return connections
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            def read_csv(name):
+                with archive.open(name) as file:
+                    return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
+            routes = {row["route_id"]: row for row in read_csv("routes.txt")}
+            trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
+            stops = {row["stop_id"]: row for row in read_csv("stops.txt")}
+            shapes = defaultdict(list)
+            for row in read_csv("shapes.txt"):
+                try:
+                    shapes[row["shape_id"]].append((
+                        int(row["shape_pt_sequence"]),
+                        float(row["shape_pt_lat"]),
+                        float(row["shape_pt_lon"]),
+                    ))
+                except (KeyError, TypeError, ValueError):
+                    continue
+            stop_times = defaultdict(list)
+            for row in read_csv("stop_times.txt"):
+                stop_times[row["trip_id"]].append(row)
 
-    OTP currently does not chain its BRT and LRT platform vertices at USJ 7,
-    despite their explicit GTFS transfer. Its fallback is a long walking leg
-    along the same corridor. This policy substitutes the real BRT connection
-    only when the requested journey is already walking from South Quay to the
-    USJ 7 LRT platform to continue by rail.
-    """
-    if origin_station.get("id") != "BRT6":
+        for trip_id, rows in stop_times.items():
+            trip = trips.get(trip_id, {})
+            route = routes.get(trip.get("route_id"), {})
+            if (route.get("route_short_name") or "").upper() != "BRT":
+                continue
+            rows.sort(key=lambda row: int(row.get("stop_sequence") or 0))
+            target_index = next(
+                (index for index, row in enumerate(rows) if row.get("stop_id") == "BRT7"),
+                None,
+            )
+            if target_index is None:
+                continue
+            target = rows[target_index]
+            try:
+                target_seconds = _gtfs_time_seconds(target["arrival_time"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            for row in rows[:target_index]:
+                try:
+                    travel_seconds = target_seconds - _gtfs_time_seconds(row["departure_time"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if travel_seconds > 0:
+                    origin_stop = stops.get(row["stop_id"], {})
+                    target_stop = stops.get("BRT7", {})
+                    shape = sorted(shapes.get(trip.get("shape_id"), []))
+                    try:
+                        origin_lat, origin_lon = float(origin_stop["stop_lat"]), float(origin_stop["stop_lon"])
+                        target_lat, target_lon = float(target_stop["stop_lat"]), float(target_stop["stop_lon"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if shape:
+                        start_index = min(
+                            range(len(shape)),
+                            key=lambda index: _distance_meters(origin_lat, origin_lon, shape[index][1], shape[index][2]),
+                        )
+                        end_index = min(
+                            range(len(shape)),
+                            key=lambda index: _distance_meters(target_lat, target_lon, shape[index][1], shape[index][2]),
+                        )
+                        segment = shape[start_index:end_index + 1]
+                        coordinates = [[lon, lat] for _, lat, lon in segment] if end_index >= start_index else []
+                    else:
+                        coordinates = []
+                    intermediate_stops = []
+                    start_sequence = int(row.get("stop_sequence") or 0)
+                    for stop_time in rows:
+                        try:
+                            sequence = int(stop_time.get("stop_sequence") or 0)
+                        except ValueError:
+                            continue
+                        if not start_sequence < sequence < int(target.get("stop_sequence") or 0):
+                            continue
+                        stop = stops.get(stop_time.get("stop_id"), {})
+                        try:
+                            intermediate_stops.append({
+                                "name": stop["stop_name"],
+                                "lat": float(stop["stop_lat"]),
+                                "lon": float(stop["stop_lon"]),
+                            })
+                        except (KeyError, TypeError, ValueError):
+                            continue
+                    connection = {
+                        "travelSeconds": travel_seconds,
+                        "coordinates": coordinates,
+                        "intermediateStops": intermediate_stops,
+                    }
+                    previous = connections.get(row["stop_id"])
+                    if previous is None or travel_seconds < previous["travelSeconds"]:
+                        connections[row["stop_id"]] = connection
+        return connections
+    except (zipfile.BadZipFile, OSError, KeyError):
+        return {}
+
+
+def _gtfs_time_seconds(value):
+    hours, minutes, seconds = (int(part) for part in value.split(":"))
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _add_brt_usj7_alternatives(itineraries, origin_station):
+    if not origin_station or not origin_station.get("id"):
         return
+    brt_connection = _brt_to_usj7_connections().get(origin_station.get("id"))
+    if brt_connection is None:
+        return
+    brt_travel_seconds = brt_connection["travelSeconds"]
     brt_destination = {
         "name": "USJ7",
         "lat": 3.0548355,
         "lon": 101.591941,
     }
+    alternatives = []
     for itinerary in itineraries:
         legs = itinerary.get("legs") or []
-        # OTP sometimes already supplies the BRT leg. In that case do not add
-        # the South Quay safeguard a second time.
         if any(
             ((leg.get("route") or {}).get("shortName") or "").upper() == "BRT"
             for leg in legs
@@ -1157,16 +1788,37 @@ def _prefer_south_quay_brt_transfer(itineraries, origin_station):
                     brt_destination["lon"],
                 ) <= 150
                 start_time = int(leg["startTime"])
-                end_time = int(leg["endTime"])
             except (KeyError, TypeError, ValueError):
                 continue
             if not reaches_usj7:
                 continue
-            brt_duration = 120
-            legs[index] = {
+            access_time = datetime.fromtimestamp(start_time / 1000, APP_TIMEZONE)
+            brt_departure = _next_scheduled_departure(origin_station["id"], "BRT", access_time)
+            if brt_departure is None:
+                continue
+            brt_arrival = brt_departure + timedelta(seconds=brt_travel_seconds)
+            lrt_route = _route_label(next_leg.get("route") or {})
+            lrt_departure = _next_scheduled_departure("KJ31", lrt_route, brt_arrival)
+            if lrt_departure is None:
+                continue
+            transfer_wait = (lrt_departure - brt_arrival).total_seconds()
+            if transfer_wait > MAX_PUBLIC_TRANSPORT_TRANSFER_WAIT_SECONDS:
+                continue
+            candidate = copy.deepcopy(itinerary)
+            candidate_legs = candidate.get("legs") or []
+            candidate_next_leg = candidate_legs[index + 1]
+            try:
+                old_lrt_start = int(next_leg["startTime"])
+                old_lrt_end = int(next_leg["endTime"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            lrt_duration = max(0, (old_lrt_end - old_lrt_start) // 1000)
+            brt_start = int(brt_departure.timestamp() * 1000)
+            lrt_start = int(lrt_departure.timestamp() * 1000)
+            candidate_legs[index] = {
                 "mode": "TRAM",
-                "startTime": str(start_time),
-                "endTime": str(start_time + brt_duration * 1000),
+                "startTime": str(brt_start),
+                "endTime": str(brt_start + brt_travel_seconds * 1000),
                 "headsign": "USJ7",
                 "from": {
                     "name": origin_station["name"],
@@ -1175,20 +1827,53 @@ def _prefer_south_quay_brt_transfer(itineraries, origin_station):
                 },
                 "to": brt_destination,
                 "route": {"shortName": "BRT"},
-                "intermediateStops": [],
+                "legGeometry": {"coordinates": brt_connection["coordinates"]},
+                "intermediateStops": brt_connection["intermediateStops"],
             }
-            itinerary["duration"] = max(
-                0, itinerary.get("duration", 0) - max(0, (end_time - start_time) // 1000 - brt_duration)
-            )
+            candidate_next_leg["startTime"] = str(lrt_start)
+            candidate_next_leg["endTime"] = str(lrt_start + lrt_duration * 1000)
+            candidate["duration"] = max(0, (
+                max(int(item.get("endTime", 0)) for item in candidate_legs)
+                - min(int(item.get("startTime", 0)) for item in candidate_legs)
+            ) // 1000)
+            alternatives.append(candidate)
             break
+    itineraries.extend(alternatives)
+
+
+def _enrich_brt_legs(itineraries):
+    connections = _brt_to_usj7_connections()
+    for itinerary in itineraries:
+        for leg in itinerary.get("legs") or []:
+            if (_route_label(leg.get("route") or {}) or "").upper() != "BRT":
+                continue
+            origin = _station_id_at_place(leg.get("from") or {})
+            destination = _station_id_at_place(leg.get("to") or {})
+            if origin is None or destination is None or destination["id"] != "BRT7":
+                continue
+            connection = connections.get(origin["id"])
+            if connection is None:
+                continue
+            if not leg.get("intermediateStops"):
+                leg["intermediateStops"] = copy.deepcopy(connection["intermediateStops"])
+            if connection["coordinates"]:
+                leg["legGeometry"] = {"coordinates": connection["coordinates"]}
 
 
 @app.get("/api/transit/stops/{stop_id}/departures")
 def get_next_departures(stop_id: str, limit: int | None = None):
-    now = datetime.now().astimezone()
+    now = _local_now()
     next_departures = _live_vehicle_estimates(stop_id)
 
+    frequency_departures = _frequency_departures(stop_id, now)
+    frequency_routes = {
+        departure["route"] for departure in frequency_departures
+    }
+    next_departures.extend(frequency_departures)
+
     for route, scheduled_time, active_days in _scheduled_departures_by_stop().get(stop_id, []):
+        if route in frequency_routes:
+            continue
         departure = _next_departure_datetime(scheduled_time, active_days, now)
         if departure is None:
             continue
@@ -1209,9 +1894,6 @@ def get_next_departures(stop_id: str, limit: int | None = None):
     unique_departures = []
     seen_departures = set()
     for departure in next_departures:
-        # Keep the soonest arrival for every bus route, and for each direction
-        # of rail/BRT. GTFS schedules can contain hundreds of future trips for
-        # one line, while the station UI needs distinct services only.
         key = (departure["route"],) if departure["is_bus"] else (
             departure["route"], departure["direction"]
         )
@@ -1219,8 +1901,6 @@ def get_next_departures(stop_id: str, limit: int | None = None):
             unique_departures.append(departure)
             seen_departures.add(key)
 
-    # Return every available arrival by default. A client may still request a
-    # positive limit when it needs a compact result.
     if limit is not None:
         limit = max(1, limit)
         unique_departures = unique_departures[:limit]
@@ -1229,38 +1909,66 @@ def get_next_departures(stop_id: str, limit: int | None = None):
 
 @app.get("/api/transit/stops/{stop_id}/incidents")
 def get_stop_incidents(stop_id: str):
-    """Expose current anonymous incident summaries without exposing reporters."""
     reports = _recent_incident_reports([stop_id]).get(stop_id, [])
     counts = defaultdict(int)
-    for report_type in reports:
-        counts[report_type] += 1
+    for report in reports:
+        counts[(report["type"], report.get("route"))] += 1
     return {
         "incidents": [
-            {"type": report_type, "count": count}
-            for report_type, count in sorted(counts.items())
+            {"type": report_type, "route": route, "count": count}
+            for (report_type, route), count in sorted(
+                counts.items(), key=lambda item: (item[0][0], item[0][1] or "")
+            )
         ],
         "windowMinutes": INCIDENT_REPORT_WINDOW_MINUTES,
     }
 
+
+@lru_cache(maxsize=1)
+def _stop_route_labels():
+    labels = defaultdict(set)
+    for filename in ("gtfs-bus.zip", "gtfs-mrtfeeder.zip", "gtfs-rail.zip", "gtfs-ktmb.zip"):
+        zip_path = DATA_DIRECTORY / filename
+        if not zip_path.exists():
+            continue
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                def read_csv(name):
+                    with archive.open(name) as file:
+                        return list(csv.DictReader(io.TextIOWrapper(file, encoding="utf-8-sig")))
+                routes = {row["route_id"]: row for row in read_csv("routes.txt")}
+                trips = {row["trip_id"]: row for row in read_csv("trips.txt")}
+                for row in read_csv("stop_times.txt"):
+                    trip = trips.get(row.get("trip_id"), {})
+                    route = routes.get(trip.get("route_id"), {})
+                    label = route.get("route_short_name") or route.get("route_long_name")
+                    if row.get("stop_id") and label:
+                        labels[row["stop_id"]].add(str(label))
+        except (zipfile.BadZipFile, OSError, KeyError):
+            continue
+    return {stop_id: ",".join(sorted(values)) for stop_id, values in labels.items()}
+
+
 @app.get("/api/transit/stops")
 def get_gtfs_stops():
-    # Array mapping our split official feed zip layers
     gtfs_files = [
-        "./gtfs-bus.zip",
-        "./gtfs-mrtfeeder.zip",
-        "./gtfs-rail.zip",
-        "./gtfs-ktmb.zip",
+        DATA_DIRECTORY / "gtfs-bus.zip",
+        DATA_DIRECTORY / "gtfs-mrtfeeder.zip",
+        DATA_DIRECTORY / "gtfs-rail.zip",
+        DATA_DIRECTORY / "gtfs-ktmb.zip",
     ]
     features = []
+    route_labels = _stop_route_labels()
     
     for zip_path in gtfs_files:
+        if not zip_path.exists():
+            continue
         try:
             with zipfile.ZipFile(zip_path, 'r') as z:
                 if 'stops.txt' not in z.namelist():
-                    continue # Skip safely if a file is malformed
+                    continue
                     
-                # Identify if this specific zip represents the rail network
-                is_rail_dataset = "rail" in zip_path.lower()
+                is_rail_dataset = any(name in zip_path.name.lower() for name in ("rail", "ktmb"))
                 
                 with z.open('stops.txt') as f:
                     text_stream = io.TextIOWrapper(f, encoding='utf-8-sig')
@@ -1272,26 +1980,25 @@ def get_gtfs_stops():
                             stop_lon = float(row['stop_lon'])
                             stop_name = row.get('stop_name', 'Unknown Stop')
                             stop_id = row.get('stop_id', '')
+                            is_brt_stop = "BRT" in route_labels.get(stop_id, "").upper().split(",")
                             
                             feature = {
                                 "type": "Feature",
                                 "geometry": {
-                                "type": "Point",
-                                "coordinates": [stop_lon, stop_lat]
+                                    "type": "Point",
+                                    "coordinates": [stop_lon, stop_lat]
                                 },
                                 "properties": {
                                     "id": stop_id,
                                     "name": stop_name,
-                                    # Tag dynamically so Flutter can apply distinct styles
-                                    "transit_type": "rail" if is_rail_dataset else "bus"
+                                    "transit_type": "bus" if is_brt_stop else ("rail" if is_rail_dataset else "bus"),
+                                    "routes": route_labels.get(stop_id, ""),
                                 }
                             }
                             features.append(feature)
                         except (ValueError, KeyError):
                             continue
-                            
-        except FileNotFoundError:
-            # Continue to next file if one is missing during initial testing
+        except (zipfile.BadZipFile, OSError):
             continue
             
     if not features:
@@ -1302,144 +2009,143 @@ def get_gtfs_stops():
         "features": features
     }
 
-@app.post("/api/route")
-def get_transit_route(request: RouteRequest):
-    departure = datetime.now().astimezone()
+
+@app.post("/api/route/motis")
+def get_motis_route(request: RouteRequest):
+    """Smoke-test the MOTIS adapter without changing the production router."""
+    departure = _local_now()
     departure_date = request.departure_date or departure.strftime("%Y-%m-%d")
     departure_time = request.departure_time or departure.strftime("%H:%M:%S")
     try:
-        requested_departure = datetime.strptime(
+        departure_datetime = datetime.strptime(
             f"{departure_date} {departure_time}", "%Y-%m-%d %H:%M:%S"
-        ).replace(tzinfo=departure.tzinfo)
-    except ValueError:
-        requested_departure = departure
-    nearest_station = _nearest_rail_or_brt_station(request.from_lat, request.from_lon)
-    street_access = _street_walk_to_station(
+        ).replace(tzinfo=APP_TIMEZONE)
+        return {
+            "itineraries": motis_plan(
+                from_lat=request.from_lat,
+                from_lon=request.from_lon,
+                to_lat=request.to_lat,
+                to_lon=request.to_lon,
+                departure_time=departure_datetime,
+            )
+        }
+    except requests.exceptions.RequestException as error:
+        raise HTTPException(status_code=502, detail=f"MOTIS unavailable: {error}")
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=502, detail=f"Invalid MOTIS response: {error}")
+
+
+@app.post("/api/route")
+def get_transit_route(request: RouteRequest):
+    departure = _local_now()
+    departure_date = request.departure_date or departure.strftime("%Y-%m-%d")
+    departure_time = request.departure_time or departure.strftime("%H:%M:%S")
+    origin_station = _nearest_transit_station(request.from_lat, request.from_lon)
+    destination_station = _nearest_transit_station(request.to_lat, request.to_lon)
+    origin_station_distance = _distance_meters(
         request.from_lat,
         request.from_lon,
-        nearest_station,
-        departure_date,
-        departure_time,
+        origin_station["lat"],
+        origin_station["lon"],
     )
-    if street_access is None:
-        itinerary = _fallback_itinerary(
-            request,
-            "HAIL",
-            "No walkable access to the nearest station was found; showing an e-hailing estimate.",
-        )
-        itinerary["routeCategory"] = "ehailing"
-        return {"itineraries": [itinerary]}
-    access_walk_seconds = int((street_access or {}).get("duration") or 0)
-    station_departure = requested_departure + timedelta(seconds=access_walk_seconds)
-    bus_mode = "" if request.prefer_brt else "          { mode: BUS },\n"
 
-    # Constructing the strict OTP v2 GraphQL itinerary query
-    query = """
-    query GetTransitRoute($fromLat: Float!, $fromLon: Float!, $toLat: Float!, $toLon: Float!, $date: String!, $time: String!) {
-      plan(
-        from: { lat: $fromLat, lon: $fromLon }
-        to: { lat: $toLat, lon: $toLon }
-        date: $date
-        time: $time
-        numItineraries: 8
-        # Allow a short window for the next service. This lets the route join
-        # a nearby station rather than abandoning it for a long walk just
-        # because a frequent BRT or rail vehicle is a few minutes away.
-        # Transfers may need to wait beyond one scheduled headway, especially
-        # for feeder services. Search two hours so OTP can find the next valid
-        # connecting trip instead of abandoning the transit option.
-        searchWindow: 7200
-        # Prefer pedestrian paths and lower-risk walking links for transfers
-        # before using ordinary roadside segments. OTP falls back to roads only
-        # where the OSM pedestrian network does not provide a connection.
-        optimize: SAFE
-        # Once the access walk reaches the nearest station, make boarding the
-        # available rail/BRT service preferable to walking along the corridor
-        # to a farther station (for example South Quay to USJ 7).
-        walkReluctance: 4.0
-        transportModes: [
-__BUS_MODE__
-          { mode: TRAM },
-          { mode: RAIL }, 
-          { mode: SUBWAY }, 
-          { mode: WALK }
-        ]
-      ) {
-        itineraries {
-          duration
-          legs {
-            mode
-            startTime
-            endTime
-            headsign
-            from {
-              name
-              lat
-              lon
-            }
-            to {
-              name
-              lat
-              lon
-            }
-            route {
-              shortName
-              longName
-            }
-            legGeometry {
-              points
-            }
-            intermediateStops {
-              name
-              lat
-              lon
-            }
-          }
-        }
-      }
-    }
-    """
-    query = query.replace("__BUS_MODE__", bus_mode)
-    
-    variables = {
-        "fromLat": nearest_station["lat"],
-        "fromLon": nearest_station["lon"],
-        "toLat": request.to_lat,
-        "toLon": request.to_lon,
-        "date": station_departure.strftime("%Y-%m-%d"),
-        "time": station_departure.strftime("%H:%M:%S"),
-    }
-    
+    if origin_station_distance <= STATION_AREA_RADIUS_METERS:
+        origin_access = None
+        origin_access_allowed = True
+    else:
+        origin_access = _street_walk_to_station(
+            request.from_lat,
+            request.from_lon,
+            origin_station,
+            departure_date,
+            departure_time,
+        )
+        origin_access_allowed = False
+
+    routing_date, routing_time = departure_date, departure_time
+    if origin_access and origin_access.get("legs"):
+        try:
+            access_seconds = sum(
+                max(0, (int(leg["endTime"]) - int(leg["startTime"])) // 1000)
+                for leg in origin_access["legs"]
+            )
+            origin_access_allowed = access_seconds * 1.35 <= 1000
+            if origin_access_allowed:
+                access_end = int(origin_access["legs"][-1]["endTime"])
+                access_datetime = datetime.fromtimestamp(access_end / 1000, APP_TIMEZONE)
+                routing_date = access_datetime.strftime("%Y-%m-%d")
+                routing_time = access_datetime.strftime("%H:%M:%S")
+        except (KeyError, TypeError, ValueError, IndexError, OSError):
+            origin_access_allowed = False
+
+    destination_station_distance = _distance_meters(
+        request.to_lat,
+        request.to_lon,
+        destination_station["lat"],
+        destination_station["lon"],
+    )
+    destination_access_leg = None
+    destination_access_allowed = True
+    if destination_station_distance > STATION_AREA_RADIUS_METERS:
+        reverse_destination_walk = _street_walk_to_station(
+            request.to_lat,
+            request.to_lon,
+            destination_station,
+            departure_date,
+            departure_time,
+        )
+        destination_access_leg = _destination_access_leg(
+            destination_station,
+            request.to_lat,
+            request.to_lon,
+            reverse_destination_walk,
+        )
+        if destination_access_leg is None:
+            destination_access_allowed = False
+        else:
+            destination_seconds = int(destination_access_leg["endTime"]) // 1000
+            destination_access_allowed = destination_seconds * 1.35 <= 1000
+
+    if origin_station_distance <= STATION_AREA_RADIUS_METERS:
+        routing_from_lat = request.from_lat
+        routing_from_lon = request.from_lon
+    else:
+        routing_from_lat = origin_station["lat"]
+        routing_from_lon = origin_station["lon"]
+    routing_to_lat = destination_station["lat"]
+    routing_to_lon = destination_station["lon"]
+
     try:
-        response = requests.post(
-            OTP_URL, 
-            json={"query": query, "variables": variables},
-            headers={"Content-Type": "application/json"},
-            timeout=60
+        departure_datetime = datetime.strptime(
+            f"{routing_date} {routing_time}", "%Y-%m-%d %H:%M:%S"
+        ).replace(tzinfo=APP_TIMEZONE)
+        itineraries = motis_plan(
+            from_lat=routing_from_lat,
+            from_lon=routing_from_lon,
+            to_lat=routing_to_lat,
+            to_lon=routing_to_lon,
+            departure_time=departure_datetime,
+            from_stop_id=_motis_stop_ref(origin_station["id"]),
+            to_stop_id=_motis_stop_ref(destination_station["id"]),
         )
-        
-        if response.status_code != 200:
-            raise HTTPException(status_code=502, detail="Invalid response from OpenTripPlanner engine.")
-            
-        data = response.json()
-        
-        # Check for upstream GraphQL errors
-        if "errors" in data:
-            raise HTTPException(status_code=400, detail=data["errors"][0]["message"])
-            
-        plan_data = data.get("data", {}).get("plan") or {}
-        itineraries = plan_data.get("itineraries") or []
-
-        if access_walk_seconds > 25 and street_access is not None:
-            access_walk_legs = street_access["legs"]
+        if not origin_access_allowed or not destination_access_allowed:
+            itineraries = []
+        else:
             for itinerary in itineraries:
-                legs = itinerary.get("legs") or []
-                if any(leg.get("mode", "").upper() not in {"", "WALK"} for leg in legs):
-                    itinerary["legs"] = [dict(leg) for leg in access_walk_legs] + legs
-                    itinerary["duration"] = itinerary.get("duration", 0) + access_walk_seconds
-
-        _prefer_south_quay_brt_transfer(itineraries, nearest_station)
+                if origin_access:
+                    _prepend_origin_access(itinerary, origin_access)
+                if destination_access_leg:
+                    _append_destination_access(itinerary, destination_access_leg)
+            try:
+                _enrich_brt_legs(itineraries)
+                _add_brt_usj7_alternatives(itineraries, origin_station)
+            except (OSError, KeyError, TypeError, ValueError, zipfile.BadZipFile) as error:
+                logger.warning("BRT enrichment was unavailable: %s", error)
         _apply_station_transfer_times(itineraries)
+        _attach_transfer_waits(itineraries)
+        itineraries = _discard_excessive_transfer_waits(itineraries)
+        _replace_long_last_mile_walks(itineraries, request)
+        itineraries = _discard_walks_over_one_kilometre(itineraries)
 
         for itinerary in itineraries:
             sheltered_walk_fraction = 0.0
@@ -1473,25 +2179,15 @@ __BUS_MODE__
             itinerary["uncoveredWalkSeconds"] = max(
                 0, walking_seconds - sheltered_walk_seconds
             )
-            itinerary["isRecommended"] = any(
-                (leg.get("route") or {}).get("shortName", "").upper() == "BRT"
-                for leg in itinerary.get("legs") or []
-            )
 
         _attach_congestion_metadata(itineraries)
 
-        # A covered walkway is preferred to an exposed one even when it is
-        # longer. Journey duration and BRT use only break ties with the same
-        # amount of uncovered walking.
         itineraries.sort(
             key=lambda itinerary: (
-                # Recent incident reports take priority over comfort ranking:
-                # the router should offer a viable alternative to a reported
-                # disruption even if its walking connection is less sheltered.
                 itinerary.get("incidentScore", 0),
+                itinerary["walkingSeconds"],
                 itinerary["uncoveredWalkSeconds"],
                 itinerary.get("congestionScore", 0),
-                -int(itinerary["isRecommended"]),
                 itinerary.get("duration", float("inf")),
             )
         )
@@ -1506,25 +2202,22 @@ __BUS_MODE__
             if services not in seen_services:
                 unique_itineraries.append(itinerary)
                 seen_services.add(services)
-        # Keep route choices meaningfully different: one rail-dominant option,
-        # one bus-dominant option, and e-hailing. OTP often returns the same
-        # BRT route repeatedly with only a different wait time.
-        category_choices = {}
-        fallback_itineraries = []
+
         for itinerary in unique_itineraries:
-            category = _itinerary_category(itinerary)
-            itinerary["routeCategory"] = category
-            if category in {"rail", "bus"} and category not in category_choices:
-                category_choices[category] = itinerary
-            else:
-                fallback_itineraries.append(itinerary)
-        itineraries = [
-            category_choices[category]
-            for category in ("rail", "bus")
-            if category in category_choices
+            itinerary["routeCategory"] = _itinerary_category(itinerary)
+
+        transit_candidates = [
+            itinerary for itinerary in unique_itineraries
+            if any(
+                (leg.get("mode") or "").upper() not in {"WALK", "HAIL", ""}
+                for leg in itinerary.get("legs") or []
+            )
         ]
-        if not itineraries and fallback_itineraries:
-            itineraries = [fallback_itineraries[0]]
+        non_transit_candidates = [
+            itinerary for itinerary in unique_itineraries
+            if itinerary not in transit_candidates
+        ]
+        itineraries = (transit_candidates + non_transit_candidates)[:8]
 
         has_transit = any(
             leg.get("mode", "").upper() not in {"WALK", ""}
@@ -1533,8 +2226,6 @@ __BUS_MODE__
         )
 
         if has_transit:
-            # Keep a direct e-hailing estimate available as a user-selectable
-            # alternative whenever OTP finds public-transport itineraries.
             itineraries.append(_fallback_itinerary(
                 request,
                 "HAIL",
@@ -1542,7 +2233,6 @@ __BUS_MODE__
             ))
         else:
             if itineraries:
-                # OTP found a walkable route but no public-transport service.
                 itineraries[0]["fallback"] = {
                     "type": "walk",
                     "message": "No public transport is available; showing the walking route.",
@@ -1564,8 +2254,6 @@ __BUS_MODE__
                         "No public transport is available; showing an approximate e-hailing journey.",
                     )]
 
-        # Normalize OTP's nested GraphQL fields into the exact shape consumed by
-        # Flutter's transit-leg list. Intermediate stops retain OTP's order.
         for itinerary in itineraries:
             ktm_fare = _ktm_fare_for_itinerary(itinerary)
             if ktm_fare is not None:
@@ -1579,6 +2267,7 @@ __BUS_MODE__
                     "trip_headsign": leg.get("headsign")
                 })
                 leg["isSheltered"] = bool(leg.get("isSheltered"))
+                leg["paymentMethod"] = _payment_guidance_for_leg(leg)
 
                 live_bus = _live_bus_estimate_for_leg(
                     leg, route_label
@@ -1605,9 +2294,9 @@ __BUS_MODE__
         return {"itineraries": itineraries}
         
     except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=503, detail=f"Could not connect to OTP engine: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Could not connect to MOTIS: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn
-    # FastAPI will listen natively on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)

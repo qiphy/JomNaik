@@ -1,17 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' show Point;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:maplibre_gl/maplibre_gl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'map_tiles_source.dart';
 
 const _configuredBackendBaseUrl = String.fromEnvironment('BACKEND_URL');
 const _supabaseUrl = String.fromEnvironment(
@@ -32,10 +33,12 @@ String get _backendBaseUrl {
     return _configuredBackendBaseUrl;
   }
 
-  // On a USB-connected Android device, use `adb reverse tcp:8000 tcp:8000`
-  // to forward the device loopback address to this computer's FastAPI server.
-  // Use BACKEND_URL for an emulator or a phone connected over Wi-Fi.
-  return 'http://127.0.0.1:8000';
+  // The production FastAPI service is hosted on DigitalOcean. BACKEND_URL
+  // remains available for local development or a future domain name.
+  // Docker Compose publishes FastAPI on the server's port 80
+  // (`80:8000`), so clients must use the public HTTP port rather than the
+  // container's internal port 8000.
+  return 'http://0.0.0.0:8000';
 }
 
 Future<void> main() async {
@@ -54,7 +57,42 @@ class JomNaikApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(title: 'JomNaik Map', home: MapView());
+    return const MaterialApp(title: 'JomNaik Map', home: _StartupScreen());
+  }
+}
+
+class _StartupScreen extends StatefulWidget {
+  const _StartupScreen();
+
+  @override
+  State<_StartupScreen> createState() => _StartupScreenState();
+}
+
+class _StartupScreenState extends State<_StartupScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 1600), () {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const MapView()),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/logo.png', width: 220, height: 220),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -68,11 +106,13 @@ class MapView extends StatefulWidget {
 class _MapViewState extends State<MapView> {
   static const _currentRegion = 'Klang Valley';
   MapLibreMapController? _mapController;
+  final http.Client _httpClient = http.Client();
   String? _dynamicStyleString;
   Itinerary? _currentItinerary;
   StreamSubscription<Position>? _locationSubscription;
   Circle? _userLocationMarker;
   Circle? _userLocationHalo;
+  Circle? _selectedPlaceMarker;
   Future<void> _locationMarkerUpdate = Future.value();
   Position? _lastKnownPosition;
   bool _hasCenteredInitialLocation = false;
@@ -91,11 +131,21 @@ class _MapViewState extends State<MapView> {
   PlaceSearchResult? _selectedPlace;
   bool _isSearchingPlaces = false;
   int _placeSearchRequestId = 0;
+  DateTime? _lastLocationWorkAt;
+  bool _routeRequestInFlight = false;
+  final Map<String, _TimedCache<List<StopDeparture>>> _departureCache = {};
+  final Map<String, _TimedCache<List<StationIncident>>> _incidentCache = {};
   bool _isSearchOpen = false;
+  final Set<String> _submittedIncidentKeys = <String>{};
   List<_TransitStation> _railStations = const [];
   Map<String, _TransitStop> _transitStopsById = const {};
   _TransitStation? _nearestStation;
   int _selectedTab = 0;
+
+  bool get _canReportIncident =>
+      _isSupabaseConfigured &&
+      Supabase.instance.client.auth.currentUser != null &&
+      Supabase.instance.client.auth.currentSession != null;
 
   @override
   void initState() {
@@ -115,6 +165,7 @@ class _MapViewState extends State<MapView> {
     _placeSearchDebounce?.cancel();
     _placeSearchFocusNode.dispose();
     _placeSearchController.dispose();
+    _httpClient.close();
     super.dispose();
   }
 
@@ -151,21 +202,16 @@ class _MapViewState extends State<MapView> {
   }
 
   void _selectTab(int index) {
-    setState(() => _selectedTab = index);
+    setState(() {
+      _selectedTab = index;
+      if (index != 0) _isSearchOpen = false;
+    });
     if (index == 0 && _lastKnownPosition != null) {
       unawaited(_askForNearbyStationChoice(_lastKnownPosition!));
     }
   }
 
   Future<void> _prepareMapData() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final pmtilesFile = File('${directory.path}/klang_valley.pmtiles');
-
-    if (!await pmtilesFile.exists()) {
-      final asset = await rootBundle.load('assets/tiles/klang_valley.pmtiles');
-      await pmtilesFile.writeAsBytes(asset.buffer.asUint8List(), flush: true);
-    }
-
     final styleData = jsonDecode(
       await rootBundle.loadString('assets/style/protomaps_light.json'),
     );
@@ -181,21 +227,10 @@ class _MapViewState extends State<MapView> {
       );
     }
     (sources['protomaps'] as Map<String, dynamic>)['url'] =
-        'pmtiles://file://${pmtilesFile.path}';
+        await mapTilesSourceUrl();
 
     if (!mounted) return;
     setState(() => _dynamicStyleString = jsonEncode(styleData));
-  }
-
-  Future<void> _fetchAndDrawRoute() async {
-    final routeData = await _requestRoute(
-      fromLat: 3.0714,
-      fromLon: 101.6062,
-      toLat: 3.1340,
-      toLon: 101.6861,
-      preferBrt: true,
-    );
-    await _showRouteChoices(routeData);
   }
 
   Future<void> _searchPlaces() async {
@@ -239,6 +274,7 @@ class _MapViewState extends State<MapView> {
           _placeSearchResults = const [];
           _isSearchingPlaces = false;
         });
+        unawaited(_clearSelectedPlaceMarker());
       }
       return;
     }
@@ -249,6 +285,7 @@ class _MapViewState extends State<MapView> {
         _selectedPlace = null;
         _placeSearchResults = const [];
       });
+      unawaited(_clearSelectedPlaceMarker());
     }
     _placeSearchDebounce = Timer(
       const Duration(milliseconds: 350),
@@ -267,6 +304,7 @@ class _MapViewState extends State<MapView> {
         _selectedPlace = null;
         _placeSearchResults = const [];
         _isSearchingPlaces = false;
+        unawaited(_clearSelectedPlaceMarker());
       }
     });
     if (willOpen) {
@@ -278,13 +316,22 @@ class _MapViewState extends State<MapView> {
     }
   }
 
+  Future<void> _clearSelectedPlaceMarker() async {
+    final marker = _selectedPlaceMarker;
+    final controller = _mapController;
+    _selectedPlaceMarker = null;
+    if (marker != null && controller != null) {
+      await controller.removeCircle(marker);
+    }
+  }
+
   Future<List<PlaceSearchResult>> _findPlaces(String query) async {
     final uri = Uri.parse(
       '$_backendBaseUrl/api/places/search',
     ).replace(queryParameters: {'query': query});
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      final response = await _httpClient.get(uri).timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) {
-      throw HttpException('Location search failed.');
+      throw StateError('Location search failed.');
     }
     final payload = jsonDecode(response.body);
     if (payload is! Map<String, dynamic> || payload['results'] is! List) {
@@ -306,9 +353,9 @@ class _MapViewState extends State<MapView> {
         'longitude': coordinate.longitude.toString(),
       },
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await _httpClient.get(uri).timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) {
-      throw HttpException('Location lookup failed.');
+      throw StateError('Location lookup failed.');
     }
     final payload = jsonDecode(response.body);
     if (payload is! Map) throw const FormatException('Invalid location lookup.');
@@ -358,7 +405,22 @@ class _MapViewState extends State<MapView> {
       _placeSearchResults = const [];
       _placeSearchController.text = place.name;
     });
-    await _mapController?.animateCamera(
+    final controller = _mapController;
+    if (controller != null) {
+      if (_selectedPlaceMarker != null) {
+        await controller.removeCircle(_selectedPlaceMarker!);
+      }
+      _selectedPlaceMarker = await controller.addCircle(
+        CircleOptions(
+          geometry: LatLng(place.lat, place.lon),
+          circleRadius: 10,
+          circleColor: '#E53935',
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 3,
+        ),
+      );
+    }
+    await controller?.animateCamera(
       CameraUpdate.newLatLngZoom(LatLng(place.lat, place.lon), 15),
     );
   }
@@ -371,6 +433,7 @@ class _MapViewState extends State<MapView> {
 
   Future<void> _getDirectionsToPlace(PlaceSearchResult destination) async {
     if (_lastKnownPosition == null) await _startLocationTracking();
+    if (!mounted) return;
     final origin = _lastKnownPosition;
     final selectedStart = origin == null ? await _askForStartLocation() : null;
     if (origin == null && selectedStart == null) return;
@@ -641,6 +704,7 @@ class _MapViewState extends State<MapView> {
         _placeSearchResults = const [];
         _isSearchingPlaces = false;
       });
+      unawaited(_clearSelectedPlaceMarker());
     }
     final legs = _itineraryLegs(itinerary);
     await _drawItinerary(legs);
@@ -682,9 +746,11 @@ class _MapViewState extends State<MapView> {
     required double toLon,
     bool preferBrt = false,
   }) async {
+    if (_routeRequestInFlight) return null;
+    _routeRequestInFlight = true;
     try {
       final departure = DateTime.now();
-      final response = await http
+      final response = await _httpClient
           .post(
             Uri.parse('$_backendBaseUrl/api/route'),
             headers: const {'Content-Type': 'application/json'},
@@ -738,12 +804,14 @@ class _MapViewState extends State<MapView> {
       debugPrint('Route network error: $error');
       return null;
     } on TimeoutException {
-      _showMessage('Route service timed out. Is OTP running?');
+      _showMessage('Route service timed out. Is MOTIS running?');
       return null;
     } catch (error) {
       _showMessage('Could not calculate the route.');
       debugPrint('Route error: $error');
       return null;
+    } finally {
+      _routeRequestInFlight = false;
     }
   }
 
@@ -773,7 +841,29 @@ class _MapViewState extends State<MapView> {
           // GeoJSON expectations: [longitude, latitude]
           legCoordinates.add([point.longitude, point.latitude]);
         }
+      } else if (geometry is Map && geometry['coordinates'] is List) {
+        // GTFS shapes are supplied by the backend for generated BRT legs.
+        // Preserve every alignment point instead of drawing a straight line
+        // between the two station coordinates.
+        for (final coordinate in geometry['coordinates'] as List) {
+          if (coordinate is List &&
+              coordinate.length >= 2 &&
+              coordinate[0] is num &&
+              coordinate[1] is num) {
+            legCoordinates.add([
+              (coordinate[0] as num).toDouble(),
+              (coordinate[1] as num).toDouble(),
+            ]);
+          }
+        }
       } else {
+        // Never draw a straight line for e-hailing. The backend must provide
+        // a road-network geometry; if both road routers are unavailable, omit
+        // the map segment instead of displaying an invalid route.
+        if (mode.toUpperCase() == 'HAIL' &&
+            leg['roadRoutingUnavailable'] == true) {
+          continue;
+        }
         // Direct fallback estimates do not claim to have road-level geometry.
         final from = leg['from'];
         final to = leg['to'];
@@ -913,9 +1003,20 @@ class _MapViewState extends State<MapView> {
 
   Future<void> _updateUserLocation(Position position) async {
     _lastKnownPosition = position;
-    _updateNearestStation(position);
-    _trackAnonymousStationPresence(position);
-    unawaited(_askForNearbyStationChoice(position));
+    // GPS can emit several updates per second on some devices. Station
+    // matching, Supabase presence tracking and interchange prompts do not
+    // need that frequency; keep the map marker responsive while throttling
+    // the more expensive work to one pass every five seconds.
+    final now = DateTime.now();
+    final shouldRunLocationWork =
+        _lastLocationWorkAt == null ||
+        now.difference(_lastLocationWorkAt!) >= const Duration(seconds: 5);
+    if (shouldRunLocationWork) {
+      _lastLocationWorkAt = now;
+      _updateNearestStation(position);
+      _trackAnonymousStationPresence(position);
+      unawaited(_askForNearbyStationChoice(position));
+    }
     final controller = _mapController;
     if (controller == null) return;
 
@@ -931,34 +1032,44 @@ class _MapViewState extends State<MapView> {
     Position position,
   ) async {
     try {
-      // Remove the previous GPS dot so only the current detected location is
-      // visible on the map.
-      if (_userLocationMarker != null) {
-        await controller.removeCircle(_userLocationMarker!);
-      }
+      final coordinate = LatLng(position.latitude, position.longitude);
+      // Update existing annotations instead of removing/recreating them on
+      // every GPS event. This avoids flicker and reduces platform-channel
+      // traffic substantially during live tracking.
       if (_userLocationHalo != null) {
-        await controller.removeCircle(_userLocationHalo!);
+        await controller.updateCircle(
+          _userLocationHalo!,
+          CircleOptions(geometry: coordinate),
+        );
+      } else {
+        _userLocationHalo = await controller.addCircle(
+          CircleOptions(
+            geometry: coordinate,
+            circleRadius: 26,
+            circleColor: '#007AFF',
+            circleOpacity: 0.22,
+            circleStrokeColor: '#007AFF',
+            circleStrokeOpacity: 0.35,
+            circleStrokeWidth: 1,
+          ),
+        );
       }
-      _userLocationHalo = await controller.addCircle(
-        CircleOptions(
-          geometry: LatLng(position.latitude, position.longitude),
-          circleRadius: 26,
-          circleColor: '#007AFF',
-          circleOpacity: 0.22,
-          circleStrokeColor: '#007AFF',
-          circleStrokeOpacity: 0.35,
-          circleStrokeWidth: 1,
-        ),
-      );
-      _userLocationMarker = await controller.addCircle(
-        CircleOptions(
-          geometry: LatLng(position.latitude, position.longitude),
-          circleRadius: 9,
-          circleColor: '#007AFF',
-          circleStrokeColor: '#FFFFFF',
-          circleStrokeWidth: 3,
-        ),
-      );
+      if (_userLocationMarker != null) {
+        await controller.updateCircle(
+          _userLocationMarker!,
+          CircleOptions(geometry: coordinate),
+        );
+      } else {
+        _userLocationMarker = await controller.addCircle(
+          CircleOptions(
+            geometry: coordinate,
+            circleRadius: 9,
+            circleColor: '#007AFF',
+            circleStrokeColor: '#FFFFFF',
+            circleStrokeWidth: 3,
+          ),
+        );
+      }
       if (!_hasCenteredInitialLocation) {
         _hasCenteredInitialLocation = true;
         await controller.animateCamera(
@@ -1068,6 +1179,169 @@ class _MapViewState extends State<MapView> {
     } catch (_) {
       // Logging is optional and must never interrupt navigation or tracking.
       _loggedStationPresenceId = null;
+    }
+  }
+
+  Future<void> _openIncidentReport() async {
+    if (!_isSupabaseConfigured) {
+      _showMessage('Incident reporting is not configured yet.');
+      return;
+    }
+    final auth = Supabase.instance.client.auth;
+    if (auth.currentUser == null) {
+      _showMessage('Sign in to submit an incident report.');
+      return;
+    }
+    if (auth.currentSession == null) {
+      try {
+        await auth.refreshSession();
+      } on AuthException {
+        // The following message gives the user a safe way to recover.
+      }
+    }
+    if (auth.currentSession == null) {
+      _showMessage('Your sign-in session has expired. Please sign in again.');
+      return;
+    }
+    if (_lastKnownPosition == null) await _startLocationTracking();
+    if (!mounted) return;
+    final position = _lastKnownPosition;
+    if (position == null || _transitStopsById.isEmpty) {
+      _showMessage('Your location is needed to report an incident.');
+      return;
+    }
+
+    final stop = _transitStopsById.values.reduce((closest, candidate) {
+      final closestDistance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        closest.lat,
+        closest.lon,
+      );
+      final candidateDistance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        candidate.lat,
+        candidate.lon,
+      );
+      return candidateDistance < closestDistance ? candidate : closest;
+    });
+    final distance = Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      stop.lat,
+      stop.lon,
+    );
+    if (distance > 100) {
+      _showMessage('You need to be within 100 m of a station or stop to report an incident.');
+      return;
+    }
+
+    final isBusStop = stop.transitType == 'bus';
+    String? affectedRoute;
+    if (isBusStop) {
+      final routes = stop.routes
+          .split(',')
+          .map((route) => route.trim())
+          .where((route) => route.isNotEmpty)
+          .toList();
+      if (routes.isEmpty) routes.add('Unknown service');
+      affectedRoute = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Which bus is affected?', style: Theme.of(sheetContext).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                ...routes.map(
+                  (route) => ListTile(
+                    leading: const Icon(Icons.directions_bus),
+                    title: Text('Bus $route'),
+                    onTap: () => Navigator.of(sheetContext).pop(route),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (affectedRoute == null) return;
+    }
+    if (!mounted) return;
+
+    final report = await showModalBottomSheet<_IncidentType>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isBusStop ? 'Report bus ${affectedRoute!}' : 'Report a rail incident',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text('Reporting for ${stop.name} • ${distance.round()} m away'),
+              const SizedBox(height: 12),
+              ..._IncidentType.values.where((type) => type.isBus == isBusStop).map(
+                (type) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(type.icon, color: Colors.red.shade700),
+                  title: Text(type.label),
+                  subtitle: Text(type.description),
+                  onTap: () => Navigator.of(sheetContext).pop(type),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (report == null) return;
+
+    final reportKey = '${stop.id}:${affectedRoute ?? 'station'}:${report.name}';
+    if (_submittedIncidentKeys.contains(reportKey)) {
+      _showMessage('You have already reported this incident at this stop.');
+      return;
+    }
+    try {
+      await Supabase.instance.client.from('anonymous_incident_reports').insert({
+        'station_id': stop.id,
+        'station_name': stop.name,
+        'station_lat': stop.lat,
+        'station_lon': stop.lon,
+        'report_type': report.name,
+        'target_type': isBusStop ? 'bus' : 'station',
+        'service_route': affectedRoute,
+        'reported_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      _submittedIncidentKeys.add(reportKey);
+      _showMessage('Thanks — your anonymous report was submitted.');
+    } on PostgrestException catch (error) {
+      final message = error.message.toLowerCase();
+      if (error.code == '42501' || message.contains('row-level security')) {
+        _showMessage(
+          'Supabase denied report access. Re-run the incident-reports SQL policy setup.',
+        );
+      } else if (error.code == '42P01' ||
+          message.contains('could not find the table') ||
+          message.contains('does not exist')) {
+        _showMessage(
+          'Incident reports are not set up in Supabase yet. Run the incident-reports SQL setup.',
+        );
+      } else {
+        _showMessage('Could not submit the report: ${error.message}');
+      }
+    } catch (_) {
+      _showMessage('Could not submit the report. Check your connection and try again.');
     }
   }
 
@@ -1244,12 +1518,28 @@ class _MapViewState extends State<MapView> {
     required String transitType,
     _TransitStop? stop,
   }) {
-    final departures = _fetchNextDepartures(stopId);
-    showModalBottomSheet<void>(
+    Future<List<StopDeparture>> departureFuture = _fetchNextDepartures(stopId);
+    final incidents = _fetchStopIncidents(stopId);
+    Timer? refreshTimer;
+    var refreshScheduled = false;
+    final modalFuture = showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) => SafeArea(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          // GTFS-Realtime vehicle positions are refreshed by the backend's
+          // 20-second cache. Poll while this stop sheet is visible so live
+          // estimates update without requiring the user to close and reopen it.
+          if (!refreshScheduled) {
+            refreshScheduled = true;
+            refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+              setModalState(() {
+                departureFuture = _fetchNextDepartures(stopId);
+              });
+            });
+          }
+          return SafeArea(
         child: SizedBox(
           width: double.infinity,
           child: Padding(
@@ -1285,13 +1575,48 @@ class _MapViewState extends State<MapView> {
                         .toList(),
                   ),
                   const SizedBox(height: 24),
+                  FutureBuilder<List<StationIncident>>(
+                    future: incidents,
+                    builder: (context, snapshot) {
+                      final currentIncidents = snapshot.data ?? const [];
+                      if (currentIncidents.isEmpty) return const SizedBox.shrink();
+                      return Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                                SizedBox(width: 8),
+                                Text('Recent reports', style: TextStyle(fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...currentIncidents.map(
+                              (incident) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text('• ${incident.label}${incident.count > 1 ? ' (${incident.count})' : ''}'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   Text(
                     'Next departures',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   FutureBuilder<List<StopDeparture>>(
-                    future: departures,
+                    future: departureFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState != ConnectionState.done) {
                         return const Padding(
@@ -1346,11 +1671,18 @@ class _MapViewState extends State<MapView> {
                             (departure) => ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(Icons.schedule),
-                              title: Text(departure.route),
+                              // For rail and BRT, make the bound terminal the
+                              // primary label: e.g. "Gombak   8:12 PM".
+                              // The line remains visible beneath it.
+                              title: Text(
+                                departure.direction.isNotEmpty
+                                    ? departure.direction
+                                    : departure.route,
+                              ),
                               subtitle: Text(
                                 [
                                   if (departure.direction.isNotEmpty)
-                                    departure.direction,
+                                    departure.route,
                                   departure.isEstimated
                                       ? 'Live vehicle estimate'
                                       : 'Scheduled time',
@@ -1401,18 +1733,27 @@ class _MapViewState extends State<MapView> {
             ),
           ),
         ),
+      );
+        },
       ),
     );
+    modalFuture.whenComplete(() => refreshTimer?.cancel());
   }
 
   Future<List<StopDeparture>> _fetchNextDepartures(String stopId) async {
+    final cached = _departureCache[stopId];
+    if (cached != null &&
+        DateTime.now().difference(cached.loadedAt) <
+            const Duration(seconds: 15)) {
+      return cached.value;
+    }
     final uri = Uri.parse(
       '$_backendBaseUrl/api/transit/stops/${Uri.encodeComponent(stopId)}/departures',
     );
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    final response = await _httpClient.get(uri).timeout(const Duration(seconds: 10));
 
     if (response.statusCode != 200) {
-      throw HttpException('Could not load departures.');
+      throw StateError('Could not load departures.');
     }
 
     final data = jsonDecode(response.body);
@@ -1420,13 +1761,39 @@ class _MapViewState extends State<MapView> {
       throw const FormatException('Invalid departure response.');
     }
 
-    return (data['departures'] as List<dynamic>)
+    final departures = (data['departures'] as List<dynamic>)
         .whereType<Map>()
         .map(
           (departure) =>
               StopDeparture.fromJson(Map<String, dynamic>.from(departure)),
         )
         .toList();
+    _departureCache[stopId] = _TimedCache(departures);
+    return departures;
+  }
+
+  Future<List<StationIncident>> _fetchStopIncidents(String stopId) async {
+    final cached = _incidentCache[stopId];
+    if (cached != null &&
+        DateTime.now().difference(cached.loadedAt) <
+            const Duration(seconds: 30)) {
+      return cached.value;
+    }
+    final uri = Uri.parse(
+      '$_backendBaseUrl/api/transit/stops/${Uri.encodeComponent(stopId)}/incidents',
+    );
+    final response = await _httpClient.get(uri).timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) return const [];
+    final data = jsonDecode(response.body);
+    if (data is! Map<String, dynamic> || data['incidents'] is! List) {
+      return const [];
+    }
+    final incidents = (data['incidents'] as List<dynamic>)
+        .whereType<Map>()
+        .map((incident) => StationIncident.fromJson(Map<String, dynamic>.from(incident)))
+        .toList();
+    _incidentCache[stopId] = _TimedCache(incidents);
+    return incidents;
   }
 
   Widget _buildCongestionIndicator(List<StopDeparture> departures) {
@@ -1491,7 +1858,7 @@ class _MapViewState extends State<MapView> {
       }
 
       // Stop locations are bundled with the app, so they remain available
-      // without a network connection. OTP is only used when routing.
+      // without a network connection. MOTIS is only used when routing.
       await _mapController?.addSource(
         "offline_stops_source",
         GeojsonSourceProperties(data: geoJson),
@@ -1578,7 +1945,7 @@ class _MapViewState extends State<MapView> {
   }
 
   Future<void> _openEhailingStore() async {
-    final storeUri = Platform.isIOS
+    final storeUri = defaultTargetPlatform == TargetPlatform.iOS
         ? Uri.parse('https://apps.apple.com/my/search?term=e-hailing')
         : Uri.parse(
             'https://play.google.com/store/search?q=e-hailing%20Malaysia&c=apps',
@@ -1608,6 +1975,35 @@ class _MapViewState extends State<MapView> {
     final String period = localTime.hour >= 12 ? 'PM' : 'AM';
 
     return '$hour:$minute $period';
+  }
+
+  Future<void> _showLegIncidents(ItineraryLeg leg) async {
+    if (leg.incidentReports.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Recent service reports', style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              ...leg.incidentReports.map(
+                (incident) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                  title: Text(incident.label),
+                  subtitle: Text(incident.stationName),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildNearestStationCard() {
@@ -1650,6 +2046,7 @@ class _MapViewState extends State<MapView> {
 
   @override
   Widget build(BuildContext context) {
+    final isMapTab = _selectedTab == 0;
     final itineraryIsOpen = _selectedTab == 0 && _currentItinerary != null;
     return PopScope(
       canPop: !itineraryIsOpen,
@@ -1659,8 +2056,8 @@ class _MapViewState extends State<MapView> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          leadingWidth: _isSearchOpen ? 118 : null,
-          leading: _isSearchOpen
+          leadingWidth: isMapTab && _isSearchOpen ? 118 : null,
+          leading: isMapTab && _isSearchOpen
               ? const Padding(
                   padding: EdgeInsets.only(left: 16),
                   child: Align(
@@ -1677,7 +2074,7 @@ class _MapViewState extends State<MapView> {
                   ),
                 )
               : null,
-          title: _isSearchOpen
+          title: isMapTab && _isSearchOpen
               ? TextField(
                   key: const ValueKey('place-search-field'),
                   controller: _placeSearchController,
@@ -1690,14 +2087,16 @@ class _MapViewState extends State<MapView> {
                     border: InputBorder.none,
                   ),
                 )
-              : const Text('JomNaik'),
-          actions: [
-            IconButton(
-              tooltip: _isSearchOpen ? 'Close search' : 'Search locations',
-              icon: Icon(_isSearchOpen ? Icons.close : Icons.search),
-              onPressed: _togglePlaceSearch,
-            ),
-          ],
+              : Text(isMapTab ? 'JomNaik' : 'Profile'),
+          actions: isMapTab
+              ? [
+                  IconButton(
+                    tooltip: _isSearchOpen ? 'Close search' : 'Search locations',
+                    icon: Icon(_isSearchOpen ? Icons.close : Icons.search),
+                    onPressed: _togglePlaceSearch,
+                  ),
+                ]
+              : const [],
           elevation: 0,
         ),
         body: IndexedStack(
@@ -1716,8 +2115,13 @@ class _MapViewState extends State<MapView> {
                         onMapLongClick: (_, coordinate) =>
                             _showLongPressedLocation(coordinate),
                         styleString: _dynamicStyleString!,
-                        compassViewPosition: CompassViewPosition.bottomRight,
-                        compassViewMargins: const Point(16, 160),
+                        // MapLibre's web implementation does not support
+                        // custom compass margins. Leave them unset on web;
+                        // native builds retain the layout above the buttons.
+                        compassViewPosition: kIsWeb
+                            ? CompassViewPosition.topRight
+                            : CompassViewPosition.bottomRight,
+                        compassViewMargins: kIsWeb ? null : const Point(16, 160),
                       ),
                       if (!_isSearchOpen)
                         Positioned(
@@ -1830,6 +2234,19 @@ class _MapViewState extends State<MapView> {
                             ),
                           ),
                         ),
+                      if (_currentItinerary == null && _canReportIncident)
+                        Positioned(
+                          left: 16,
+                          bottom: 16,
+                          child: SafeArea(
+                            child: FloatingActionButton.extended(
+                              heroTag: 'report-incident',
+                              onPressed: _openIncidentReport,
+                              icon: const Icon(Icons.report_problem_outlined),
+                              label: const Text('Report'),
+                            ),
+                          ),
+                        ),
                       if (_currentItinerary != null)
                         DraggableScrollableSheet(
                           initialChildSize: 0.25,
@@ -1888,7 +2305,7 @@ class _MapViewState extends State<MapView> {
                                                 top: 4,
                                               ),
                                               child: Text(
-                                                'Estimated fare: ${_fareLabel(_currentItinerary!)}',
+                                                '${_currentItinerary!.fareLabel ?? 'Estimated fare'}: ${_fareLabel(_currentItinerary!)}',
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                 ),
@@ -1954,7 +2371,7 @@ class _MapViewState extends State<MapView> {
                                         ),
                                       ),
                                       subtitle: Text(
-                                        '${_formatTime(leg.startTime)} - ${_formatTime(leg.endTime)} • ${_currentItinerary!.fareAmount == null ? 'Direct distance estimate' : _fareLabel(_currentItinerary!)} at RM1.50/km',
+                                        '${_formatTime(leg.startTime)} - ${_formatTime(leg.endTime)} • ${_currentItinerary!.fareAmount == null ? 'Direct distance estimate' : _fareLabel(_currentItinerary!)} at RM1.50/km\nPayment: ${leg.paymentMethod ?? 'Pay in the e-hailing app'}',
                                       ),
                                       trailing: TextButton.icon(
                                         onPressed: _openEhailingStore,
@@ -1993,6 +2410,16 @@ class _MapViewState extends State<MapView> {
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
+                                        if (leg.incidentReports.isNotEmpty)
+                                          IconButton(
+                                            visualDensity: VisualDensity.compact,
+                                            tooltip: 'View recent reports',
+                                            icon: const Icon(
+                                              Icons.warning_amber_rounded,
+                                              color: Colors.orange,
+                                            ),
+                                            onPressed: () => _showLegIncidents(leg),
+                                          ),
                                       ],
                                     ),
                                     subtitle: Wrap(
@@ -2008,6 +2435,10 @@ class _MapViewState extends State<MapView> {
                                         Text(
                                           '${_formatTime(leg.startTime)} - ${_formatTime(leg.endTime)}',
                                         ),
+                                        if (leg.paymentMethod != null)
+                                          Text(
+                                            '• Payment: ${leg.paymentMethod}',
+                                          ),
                                         if (leg.liveBusEstimate != null)
                                           Text(
                                             'Live arrival: ${leg.liveBusEstimate!.minutesRemaining}${leg.liveBusEstimate!.trafficAdjusted ? ' • Traffic adjusted' : ''}',
@@ -2113,13 +2544,6 @@ class _MapViewState extends State<MapView> {
                     tooltip: 'Show my location',
                     child: const Icon(Icons.my_location),
                   ),
-                  const SizedBox(height: 12),
-                  FloatingActionButton.extended(
-                    heroTag: 'route',
-                    onPressed: _fetchAndDrawRoute,
-                    label: const Text('Route KL Sentral'),
-                    icon: const Icon(Icons.directions_transit),
-                  ),
                 ],
               )
             : null,
@@ -2174,10 +2598,17 @@ class _ProfilePageState extends State<_ProfilePage> {
               : 'Your account is ready.';
         });
       } else {
-        await auth.signInWithPassword(
+        final response = await auth.signInWithPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+        if (!mounted) return;
+        if (response.session == null || auth.currentSession == null) {
+          setState(() {
+            _message =
+                'Supabase did not create a sign-in session. Confirm the account email, then try again.';
+          });
+        }
       }
     } on AuthException catch (error) {
       if (mounted) setState(() => _message = error.message);
@@ -2197,8 +2628,9 @@ class _ProfilePageState extends State<_ProfilePage> {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, _) {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
+        final auth = Supabase.instance.client.auth;
+        final user = auth.currentUser;
+        if (user != null && auth.currentSession != null) {
           return _SignedInProfile(
             user: user,
             onStationLocationTrackingChanged:
@@ -2467,6 +2899,7 @@ class Itinerary {
     required this.legs,
     this.fallbackMessage,
     this.fareAmount,
+    this.fareLabel,
     this.congestion,
   });
 
@@ -2489,6 +2922,7 @@ class Itinerary {
       fareAmount: fare is Map && fare['amount'] is num
           ? (fare['amount'] as num).toDouble()
           : null,
+      fareLabel: fare is Map ? fare['label']?.toString() : null,
       congestion: json['congestion'] is Map
           ? Map<String, dynamic>.from(json['congestion'] as Map)
           : null,
@@ -2499,6 +2933,7 @@ class Itinerary {
   final List<ItineraryLeg> legs;
   final String? fallbackMessage;
   final double? fareAmount;
+  final String? fareLabel;
   final Map<String, dynamic>? congestion;
 }
 
@@ -2514,8 +2949,10 @@ class ItineraryLeg {
     this.isSheltered = false,
     this.isTransferWalk = false,
     this.isNearestStationAccess = false,
+    this.paymentMethod,
     this.liveBusEstimate,
     this.intermediateStops = const [],
+    this.incidentReports = const [],
   });
 
   factory ItineraryLeg.fromJson(Map<String, dynamic> json) {
@@ -2530,8 +2967,10 @@ class ItineraryLeg {
       isSheltered: json['isSheltered'] == true,
       isTransferWalk: json['isTransferWalk'] == true,
       isNearestStationAccess: json['isNearestStationAccess'] == true,
+      paymentMethod: json['paymentMethod']?.toString(),
       liveBusEstimate: LiveBusEstimate.fromJsonOrNull(json['liveBusEstimate']),
       intermediateStops: _intermediateStopsFromJson(json['intermediateStops']),
+      incidentReports: _legIncidentsFromJson(json['incidentReports']),
     );
   }
 
@@ -2545,8 +2984,26 @@ class ItineraryLeg {
   final bool isSheltered;
   final bool isTransferWalk;
   final bool isNearestStationAccess;
+  final String? paymentMethod;
   final LiveBusEstimate? liveBusEstimate;
   final List<IntermediateStop> intermediateStops;
+  final List<LegIncident> incidentReports;
+}
+
+class LegIncident {
+  const LegIncident({required this.stationName, required this.type, this.route});
+
+  factory LegIncident.fromJson(Map<String, dynamic> json) => LegIncident(
+    stationName: json['stationName']?.toString() ?? 'Affected station',
+    type: json['type']?.toString() ?? 'disruption',
+    route: json['route']?.toString(),
+  );
+
+  final String stationName;
+  final String type;
+  final String? route;
+
+  String get label => _incidentLabel(type, route);
 }
 
 class LiveBusEstimate {
@@ -2600,6 +3057,14 @@ List<IntermediateStop> _intermediateStopsFromJson(dynamic value) {
       .toList();
 }
 
+List<LegIncident> _legIncidentsFromJson(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((incident) => LegIncident.fromJson(Map<String, dynamic>.from(incident)))
+      .toList();
+}
+
 class IntermediateStop {
   const IntermediateStop({
     required this.name,
@@ -2618,6 +3083,71 @@ class IntermediateStop {
   final String name;
   final double lat;
   final double lon;
+}
+
+enum _IncidentType {
+  stuckTrain(
+    'Stuck train for over 5 minutes',
+    'A train has been stationary longer than expected.',
+    Icons.train,
+    false,
+  ),
+  crowding(
+    'Crowding',
+    'The platform, station or vehicle is unusually crowded.',
+    Icons.groups,
+    false,
+  ),
+  disruption(
+    'Service disruption',
+    'There is a delay, closure or other service issue.',
+    Icons.warning_amber_rounded,
+    false,
+  ),
+  safety(
+    'Safety or accessibility issue',
+    'Report a safety concern or an accessibility obstruction.',
+    Icons.accessible,
+    false,
+  ),
+  busNotArrived(
+    'Bus has not arrived for over 10 minutes',
+    'Report an overdue bus for the selected route.',
+    Icons.schedule,
+    true,
+  ),
+  busCrowding(
+    'Bus crowding',
+    'The selected bus is unusually crowded.',
+    Icons.groups,
+    true,
+  ),
+  busBreakdown(
+    'Bus breakdown or service issue',
+    'The selected bus is not operating normally.',
+    Icons.build_circle_outlined,
+    true,
+  ),
+  busSafety(
+    'Bus safety or accessibility issue',
+    'Report a safety concern or accessibility obstruction.',
+    Icons.accessible,
+    true,
+  );
+
+  const _IncidentType(this.label, this.description, this.icon, this.isBus);
+
+  final String label;
+  final String description;
+  final IconData icon;
+  final bool isBus;
+}
+
+class _TimedCache<T> {
+  _TimedCache(this.value) : loadedAt = DateTime.now();
+
+  final T value;
+  final DateTime loadedAt;
 }
 
 class _TransitStation {
@@ -2658,6 +3188,8 @@ class _TransitStop {
     required this.name,
     required this.lat,
     required this.lon,
+    required this.transitType,
+    required this.routes,
   });
 
   static _TransitStop? fromGeoJson(Map feature) {
@@ -2674,6 +3206,8 @@ class _TransitStop {
       name: properties['name']?.toString() ?? 'Transit stop',
       lat: lat.toDouble(),
       lon: lon.toDouble(),
+      transitType: properties['transit_type']?.toString() ?? 'bus',
+      routes: properties['routes']?.toString() ?? '',
     );
   }
 
@@ -2688,6 +3222,8 @@ class _TransitStop {
   final String name;
   final double lat;
   final double lon;
+  final String transitType;
+  final String routes;
 }
 
 class PlaceSearchResult {
@@ -2748,4 +3284,37 @@ class StopDeparture {
     if (secondsRemaining <= 60) return '< 1 min';
     return '${(secondsRemaining / 60).ceil()} min away';
   }
+}
+
+class StationIncident {
+  const StationIncident({required this.type, required this.count, this.route});
+
+  factory StationIncident.fromJson(Map<String, dynamic> json) {
+    return StationIncident(
+      type: json['type']?.toString() ?? 'disruption',
+      count: json['count'] is num ? (json['count'] as num).toInt() : 1,
+      route: json['route']?.toString(),
+    );
+  }
+
+  final String type;
+  final int count;
+  final String? route;
+
+  String get label => _incidentLabel(type, route);
+}
+
+String _incidentLabel(String type, String? route) {
+  final bus = route == null || route.trim().isEmpty ? 'Bus' : 'Bus $route';
+  return switch (type) {
+    'stuckTrain' => 'Train has been stationary for over 5 minutes',
+    'missingBus' => 'Bus or BRT has not arrived for over 10 minutes',
+    'crowding' => 'Crowding reported',
+    'safety' => 'Safety or accessibility issue reported',
+    'busNotArrived' => '$bus has not arrived for over 10 minutes',
+    'busCrowding' => '$bus crowding reported',
+    'busBreakdown' => '$bus breakdown or service issue reported',
+    'busSafety' => '$bus safety or accessibility issue reported',
+    _ => 'Service disruption reported',
+  };
 }

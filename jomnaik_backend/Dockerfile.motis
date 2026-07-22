@@ -1,0 +1,22 @@
+FROM debian:bookworm-slim
+
+ARG MOTIS_VERSION=2.10.2
+WORKDIR /opt/motis-data
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl bzip2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL "https://github.com/motis-project/motis/releases/download/v${MOTIS_VERSION}/motis-linux-amd64.tar.bz2" \
+       | tar -xj -C /usr/local/bin \
+    && chmod +x /usr/local/bin/motis
+
+# MOTIS imports the actual OSM and GTFS inputs during image construction.
+COPY klang_valley.sheltered.osm.pbf ./klang_valley.osm.pbf
+COPY gtfs-rail.zip gtfs-bus.zip gtfs-mrtfeeder.zip gtfs-ktmb.zip ./
+
+RUN motis config klang_valley.osm.pbf \
+      gtfs-rail.zip gtfs-bus.zip gtfs-mrtfeeder.zip gtfs-ktmb.zip \
+    && motis import
+
+EXPOSE 8080
+CMD ["motis", "server"]
